@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode } from 'react';
 import * as xlsx from 'xlsx';
 
 export type DataRecord = Record<string, any>;
@@ -12,8 +12,6 @@ export interface SheetAnalysis {
   categoricalCols: string[];
   dateCols: string[];
   allCols: string[];
-  kpis: { label: string; value: number; col: string }[];
-  topGroups: { col: string; valueCol: string; data: { name: string; value: number; pct: number }[] }[];
   rowCount: number;
   isEmpty: boolean;
 }
@@ -24,6 +22,7 @@ export interface ChartConfig {
   categoryCol: string;
   valueCol: string;
   title: string;
+  type: 'pie' | 'bar' | 'line';
 }
 
 export interface KpiConfig {
@@ -43,7 +42,7 @@ interface DashboardContextProps {
   handleFileUpload: (file: File) => Promise<void>;
   resetDashboard: () => void;
   chartConfigs: ChartConfig[];
-  addChart: (sheetName: string, categoryCol: string, valueCol: string) => void;
+  addChart: (sheetName: string, categoryCol: string, valueCol: string, type: 'pie'|'bar'|'line') => void;
   removeChart: (id: string) => void;
   kpiConfigs: KpiConfig[];
   addKpi: (sheetName: string, col: string) => void;
@@ -79,33 +78,24 @@ const parseNumber = (v: any): number | null => {
 
 const isIgnoredNumericCol = (colName: string, values: number[]): boolean => {
   const lower = colName.toLowerCase();
-  if (lower.includes('id') || lower.includes('code') || lower.includes('index') || lower.includes('#')) {
-    return true;
-  }
+  if (lower.includes('id') || lower.includes('code') || lower.includes('index') || lower.includes('#')) return true;
   if (lower.includes('year')) return true;
-
-  const allYears = values.every(v => Number.isInteger(v) && v >= 1900 && v <= 2100);
-  if (allYears) return true;
-
+  if (values.every(v => Number.isInteger(v) && v >= 1900 && v <= 2100)) return true;
   return false;
 };
 
-// Advanced Grid Detection: Split scattered tables into blocks
+// Advanced Grid Detection
 const splitIntoBlocks = (rawArray: any[][]): any[][][] => {
   if (!rawArray || rawArray.length === 0) return [];
-  
   interface Cell { r: number; c: number; }
   const cells: Cell[] = [];
   for (let r = 0; r < rawArray.length; r++) {
     if (!rawArray[r]) continue;
     for (let c = 0; c < rawArray[r].length; c++) {
       const v = rawArray[r][c];
-      if (v !== undefined && v !== null && String(v).trim() !== '') {
-        cells.push({ r, c });
-      }
+      if (v !== undefined && v !== null && String(v).trim() !== '') cells.push({ r, c });
     }
   }
-
   if (cells.length === 0) return [];
 
   const parent = new Map<string, string>();
@@ -114,9 +104,7 @@ const splitIntoBlocks = (rawArray: any[][]): any[][][] => {
     if (parent.get(id) !== id) parent.set(id, find(parent.get(id)!));
     return parent.get(id)!;
   };
-  const union = (id1: string, id2: string) => {
-    parent.set(find(id1), find(id2));
-  };
+  const union = (id1: string, id2: string) => parent.set(find(id1), find(id2));
 
   cells.forEach(c => parent.set(makeId(c), makeId(c)));
   const cellMap = new Set(cells.map(makeId));
@@ -178,33 +166,27 @@ const analyzeSheet = (name: string, rawArray: any[][]): SheetAnalysis => {
   }
 
   if (maxStrings === 0) {
-    return { name, records: [], numericCols: [], categoricalCols: [], dateCols: [], allCols: [], kpis: [], topGroups: [], rowCount: 0, isEmpty: true };
+    return { name, records: [], numericCols: [], categoricalCols: [], dateCols: [], allCols: [], rowCount: 0, isEmpty: true };
   }
 
   const headers = rawArray[headerRowIdx].map((h, i) => h ? String(h).trim() : `Column_${i}`);
-  
   const records: DataRecord[] = [];
   for (let i = headerRowIdx + 1; i < rawArray.length; i++) {
     const row = rawArray[i];
     if (!row || row.length === 0) continue;
-    
     const nonEmptyCount = row.filter(val => val !== null && val !== undefined && val !== '').length;
     if (nonEmptyCount < Math.max(2, headers.length * 0.3)) continue;
-
     const record: DataRecord = {};
-    headers.forEach((h, colIdx) => {
-      record[h] = row[colIdx];
-    });
+    headers.forEach((h, colIdx) => record[h] = row[colIdx]);
     records.push(record);
   }
 
   if (records.length === 0) {
-    return { name, records: [], numericCols: [], categoricalCols: [], dateCols: [], allCols: [], kpis: [], topGroups: [], rowCount: 0, isEmpty: true };
+    return { name, records: [], numericCols: [], categoricalCols: [], dateCols: [], allCols: [], rowCount: 0, isEmpty: true };
   }
 
   const allCols = headers;
   const sample = records.slice(0, Math.min(records.length, 300));
-
   const rawNumericCols: string[] = [];
   const categoricalCols: string[] = [];
   const dateCols: string[] = [];
@@ -212,14 +194,12 @@ const analyzeSheet = (name: string, rawArray: any[][]): SheetAnalysis => {
   allCols.forEach(col => {
     const vals = sample.map(r => r[col]).filter(v => v !== null && v !== undefined && v !== '');
     if (vals.length === 0) return;
-
     let numCount = 0, dateCount = 0, catCount = 0;
     vals.forEach(v => {
       if (isDateLike(v)) dateCount++;
       else if (parseNumber(v) !== null) numCount++;
       else catCount++;
     });
-
     const total = vals.length;
     if (dateCount / total > 0.5) dateCols.push(col);
     else if (numCount / total > 0.6) rawNumericCols.push(col);
@@ -231,47 +211,7 @@ const analyzeSheet = (name: string, rawArray: any[][]): SheetAnalysis => {
     return !isIgnoredNumericCol(col, vals);
   });
 
-  const allKpiCandidates = numericCols.map(col => {
-    const total = records.reduce((s, r) => s + (parseNumber(r[col]) ?? 0), 0);
-    return { label: col, value: total, col, absSum: Math.abs(total) };
-  });
-
-  allKpiCandidates.sort((a, b) => b.absSum - a.absSum);
-  const kpis = allKpiCandidates.slice(0, 4).map(k => ({ label: k.label, value: k.value, col: k.col }));
-
-  const topGroups: SheetAnalysis['topGroups'] = [];
-  const topNumCols = kpis.slice(0, 2).map(k => k.col);
-  
-  if (topNumCols.length > 0) {
-    const usefulCatCols = [...categoricalCols, ...dateCols].filter(col => {
-      const unique = new Set(records.map(r => String(r[col] ?? ''))).size;
-      return unique >= 2 && unique <= 30;
-    });
-
-    topNumCols.forEach(numCol => {
-      usefulCatCols.forEach(catCol => {
-        const map = new Map<string, number>();
-        records.forEach(r => {
-          const key = String(r[catCol] ?? 'Other').trim();
-          if (!key || key === 'undefined' || key === 'null') return;
-          const n = parseNumber(r[numCol]);
-          map.set(key, (map.get(key) || 0) + (n ?? 0));
-        });
-
-        const total = Array.from(map.values()).reduce((a, b) => a + Math.abs(b), 0);
-        const data = Array.from(map.entries())
-          .map(([name, value]) => ({ name, value, pct: total > 0 ? Math.abs(value / total) * 100 : 0 }))
-          .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
-          .slice(0, 15);
-
-        if (data.length >= 2) {
-          topGroups.push({ col: catCol, valueCol: numCol, data });
-        }
-      });
-    });
-  }
-
-  return { name, records, numericCols, categoricalCols, dateCols, allCols, kpis, topGroups, rowCount: records.length, isEmpty: false };
+  return { name, records, numericCols, categoricalCols, dateCols, allCols, rowCount: records.length, isEmpty: false };
 };
 
 // ─── Provider ───────────────────────────────────────────────────────────────
@@ -293,16 +233,12 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
       const wb = xlsx.read(buffer, { type: 'buffer', cellDates: true });
 
       let analyzed: SheetAnalysis[] = [];
-
       wb.SheetNames.forEach(sheetName => {
         const ws = wb.Sheets[sheetName];
         const rawArray = xlsx.utils.sheet_to_json(ws, { header: 1 }) as any[][];
-        
-        // Advanced Grid Detection
         const blocks = splitIntoBlocks(rawArray);
-        
         blocks.forEach((block, i) => {
-          const name = blocks.length > 1 ? `${sheetName} (Table ${i + 1})` : sheetName;
+          const name = blocks.length > 1 ? `${sheetName} (T${i + 1})` : sheetName;
           const analysis = analyzeSheet(name, block);
           if (!analysis.isEmpty) analyzed.push(analysis);
         });
@@ -310,30 +246,87 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
 
       if (analyzed.length === 0) throw new Error('No readable data found in this file.');
 
-      const autoCharts: ChartConfig[] = [];
-      const autoKpis: KpiConfig[] = [];
+      // Smart Ranking for KPIs
+      let allKpiCands: { sheet: string, col: string, score: number, val: number }[] = [];
       analyzed.forEach(sheet => {
-        sheet.topGroups.slice(0, 4).forEach((group, i) => {
-          autoCharts.push({
-            id: `auto-${sheet.name}-${i}`,
-            sheetName: sheet.name,
-            categoryCol: group.col,
-            valueCol: group.valueCol,
-            title: `${group.valueCol} by ${group.col}`
-          });
+        sheet.numericCols.forEach(col => {
+          const total = sheet.records.reduce((s, r) => s + (parseNumber(r[col]) ?? 0), 0);
+          let score = Math.abs(total);
+          const lcol = col.toLowerCase();
+          // Boost score massively for important keywords so they always win
+          if (lcol.includes('spend')) score *= 1e6;
+          if (lcol.includes('saving')) score *= 1e6;
+          if (lcol.includes('total')) score *= 1e5;
+          if (lcol.includes('net')) score *= 1e4;
+          if (lcol.includes('%') || lcol.includes('pct') || lcol.includes('percent')) score *= 1e4;
+          allKpiCands.push({ sheet: sheet.name, col, score, val: total });
         });
-        sheet.kpis.forEach((kpi, i) => {
-          autoKpis.push({
-            id: `auto-kpi-${sheet.name}-${i}`,
-            sheetName: sheet.name,
-            col: kpi.col
+      });
+      allKpiCands.sort((a, b) => b.score - a.score);
+      
+      // Deduplicate by column name to avoid repetitive KPIs
+      const seenKpiCols = new Set<string>();
+      const topKpis: KpiConfig[] = [];
+      for (const k of allKpiCands) {
+        if (!seenKpiCols.has(k.col) && topKpis.length < 4) {
+          seenKpiCols.add(k.col);
+          topKpis.push({ id: `auto-kpi-${Date.now()}-${topKpis.length}`, sheetName: k.sheet, col: k.col });
+        }
+      }
+
+      // Smart Ranking for Charts
+      let allChartCands: { sheet: string, cat: string, val: string, score: number, isDate: boolean }[] = [];
+      analyzed.forEach(sheet => {
+        const topNumCols = [...sheet.numericCols].sort((a, b) => {
+          const sA = (a.toLowerCase().includes('spend') || a.toLowerCase().includes('saving')) ? 1 : 0;
+          const sB = (b.toLowerCase().includes('spend') || b.toLowerCase().includes('saving')) ? 1 : 0;
+          return sB - sA;
+        }).slice(0, 3);
+
+        const usefulCatCols = [...sheet.categoricalCols, ...sheet.dateCols].filter(col => {
+          const unique = new Set(sheet.records.map(r => String(r[col] ?? ''))).size;
+          return unique >= 2 && unique <= 30;
+        });
+
+        topNumCols.forEach(val => {
+          usefulCatCols.forEach(cat => {
+            let score = 0;
+            const lval = val.toLowerCase();
+            const lcat = cat.toLowerCase();
+            if (lval.includes('spend') || lval.includes('saving')) score += 1000;
+            if (lcat.includes('month') || lcat.includes('category') || lcat.includes('commodity')) score += 500;
+            const isDate = sheet.dateCols.includes(cat) || lcat.includes('month') || lcat.includes('date');
+            allChartCands.push({ sheet: sheet.name, cat, val, score, isDate });
           });
         });
       });
+      allChartCands.sort((a, b) => b.score - a.score);
+
+      const seenChartCombos = new Set<string>();
+      const topCharts: ChartConfig[] = [];
+      for (const c of allChartCands) {
+        const combo = `${c.cat}-${c.val}`;
+        if (!seenChartCombos.has(combo) && topCharts.length < 5) { // Max 5 charts
+          seenChartCombos.add(combo);
+          // If it's a date/month, use line. If it's the 3rd or 4th chart, maybe bar. Else pie.
+          let type: 'pie' | 'bar' | 'line' = 'pie';
+          if (c.isDate) type = 'line';
+          else if (topCharts.length >= 2 && topCharts.length <= 3) type = 'bar';
+
+          topCharts.push({
+            id: `auto-chart-${Date.now()}-${topCharts.length}`,
+            sheetName: c.sheet,
+            categoryCol: c.cat,
+            valueCol: c.val,
+            title: `${c.val} by ${c.cat}`,
+            type
+          });
+        }
+      }
 
       setSheets(analyzed);
-      setChartConfigs(autoCharts);
-      setKpiConfigs(autoKpis);
+      setChartConfigs(topCharts);
+      setKpiConfigs(topKpis);
       setFileName(file.name);
       setMasterFilters({});
 
@@ -352,9 +345,7 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     });
   };
 
-  const resetFilters = () => {
-    setMasterFilters({});
-  };
+  const resetFilters = () => setMasterFilters({});
 
   const resetDashboard = () => {
     setSheets([]);
@@ -365,34 +356,26 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     setError(null);
   };
 
-  const addChart = (sheetName: string, categoryCol: string, valueCol: string) => {
+  const addChart = (sheetName: string, categoryCol: string, valueCol: string, type: 'pie'|'bar'|'line') => {
     setChartConfigs(prev => [...prev, {
-      id: `user-chart-${Date.now()}`, sheetName, categoryCol, valueCol, title: `${valueCol} by ${categoryCol}`
+      id: `user-chart-${Date.now()}`, sheetName, categoryCol, valueCol, title: `${valueCol} by ${categoryCol}`, type
     }]);
   };
 
-  const removeChart = (id: string) => {
-    setChartConfigs(prev => prev.filter(c => c.id !== id));
-  };
+  const removeChart = (id: string) => setChartConfigs(prev => prev.filter(c => c.id !== id));
 
   const addKpi = (sheetName: string, col: string) => {
-    setKpiConfigs(prev => [...prev, {
-      id: `user-kpi-${Date.now()}`, sheetName, col
-    }]);
+    setKpiConfigs(prev => [...prev, { id: `user-kpi-${Date.now()}`, sheetName, col }]);
   };
 
-  const removeKpi = (id: string) => {
-    setKpiConfigs(prev => prev.filter(k => k.id !== id));
-  };
+  const removeKpi = (id: string) => setKpiConfigs(prev => prev.filter(k => k.id !== id));
 
   const getFilteredRecords = (sheetName: string): DataRecord[] => {
     const sheet = sheets.find(s => s.name === sheetName);
     if (!sheet) return [];
-
     return sheet.records.filter(row => {
       return Object.entries(masterFilters).every(([col, vals]) => {
         if (!vals || vals.length === 0) return true;
-        // If the table doesn't have this column, don't filter it out, just ignore the filter for this table
         if (!(col in row)) return true; 
         return vals.includes(String(row[col] ?? ''));
       });

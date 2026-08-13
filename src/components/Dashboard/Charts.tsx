@@ -95,49 +95,62 @@ const KPICard = ({ label, value, onRemove }: { label: string; value: number; onR
   );
 };
 
-// ── Pie/Donut Chart (Power BI style with labels) ────────────────────────────
+// ── Charts ──────────────────────────────────────────────────────────────────
 
-const DonutChart = ({ title, data, onRemove, size }: {
-  title: string; data: { name: string; value: number }[]; onRemove: () => void; size: 'sm' | 'lg';
+const GenericChart = ({ title, data, type, onRemove, size }: {
+  title: string; data: { name: string; value: number }[]; type: 'pie' | 'bar' | 'line'; onRemove: () => void; size: 'sm' | 'lg';
 }) => {
   const [h, setH] = useState(false);
   const chartData = data.map((d, i) => ({ name: d.name, value: Math.abs(d.value), itemStyle: { color: COLORS[i % COLORS.length] } }));
   const total = chartData.reduce((s, d) => s + d.value, 0);
 
-  const option = {
-    tooltip: {
-      trigger: 'item', backgroundColor: 'white', borderColor: '#e8eaed', borderWidth: 1,
-      textStyle: { color: '#1a1d23', fontSize: 11 },
-      formatter: (p: any) => `<b>${p.name}</b><br/>${fmt(p.value)} (${p.percent}%)`
-    },
-    series: [{
-      type: 'pie',
-      radius: size === 'sm' ? ['35%', '65%'] : ['30%', '60%'],
-      center: ['50%', '50%'],
-      itemStyle: { borderRadius: 2, borderWidth: 1.5, borderColor: '#fff' },
-      label: {
-        show: true,
-        position: 'outside',
-        fontSize: size === 'sm' ? 9 : 10,
-        color: '#5f6368',
-        formatter: (p: any) => {
-          const pct = total > 0 ? ((p.value / total) * 100).toFixed(0) : '0';
-          const name = p.name.length > 12 ? p.name.slice(0, 12) + '…' : p.name;
-          return `${name} ${pct}%`;
-        },
-        overflow: 'truncate',
+  let option: any = {};
+
+  if (type === 'pie') {
+    option = {
+      tooltip: {
+        trigger: 'item', backgroundColor: 'white', borderColor: '#e8eaed', borderWidth: 1,
+        textStyle: { color: '#1a1d23', fontSize: 11 },
+        formatter: (p: any) => `<b>${p.name}</b><br/>${fmt(p.value)} (${p.percent}%)`
       },
-      labelLine: { length: 8, length2: 6, lineStyle: { color: '#dadce0' } },
-      emphasis: { itemStyle: { shadowBlur: 6, shadowColor: 'rgba(0,0,0,0.08)' } },
-      data: chartData
-    }]
-  };
+      series: [{
+        type: 'pie',
+        radius: size === 'sm' ? ['35%', '65%'] : ['30%', '60%'],
+        center: ['50%', '50%'],
+        itemStyle: { borderRadius: 2, borderWidth: 1.5, borderColor: '#fff' },
+        label: {
+          show: true, position: 'outside', fontSize: size === 'sm' ? 9 : 10, color: '#5f6368',
+          formatter: (p: any) => `${p.name.length > 12 ? p.name.slice(0, 12) + '…' : p.name} ${(total > 0 ? (p.value/total)*100 : 0).toFixed(0)}%`,
+        },
+        labelLine: { length: 8, length2: 6, lineStyle: { color: '#dadce0' } },
+        data: chartData
+      }]
+    };
+  } else {
+    option = {
+      tooltip: {
+        trigger: 'axis', backgroundColor: 'white', borderColor: '#e8eaed', borderWidth: 1,
+        textStyle: { color: '#1a1d23', fontSize: 11 },
+        formatter: (p: any) => `<b>${p[0].name}</b><br/>${fmt(p[0].value)}`
+      },
+      grid: { left: '3%', right: '4%', bottom: '3%', top: '15%', containLabel: true },
+      xAxis: { type: 'category', data: chartData.map(d => d.name), axisLabel: { fontSize: 9, color: '#5f6368', interval: 0, width: 60, overflow: 'truncate' }, axisLine: { lineStyle: { color: '#dadce0' } } },
+      yAxis: { type: 'value', axisLabel: { fontSize: 9, color: '#5f6368', formatter: (v: number) => fmt(v) }, splitLine: { lineStyle: { type: 'dashed', color: '#f1f3f4' } } },
+      series: [{
+        data: chartData.map(d => d.value),
+        type,
+        smooth: type === 'line',
+        itemStyle: { color: 'var(--primary)' },
+        areaStyle: type === 'line' ? { color: 'rgba(26, 115, 232, 0.1)' } : undefined,
+        barMaxWidth: 40
+      }]
+    };
+  }
 
   return (
     <div onMouseOver={() => setH(true)} onMouseOut={() => setH(false)} style={{
       background: 'var(--surface)', border: '1px solid #e8eaed', borderRadius: 6,
-      display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0,
-      padding: '0.5rem',
+      display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, padding: '0.5rem',
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, marginBottom: 2 }}>
         <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#202124', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
@@ -189,16 +202,20 @@ const AddChartModal = ({ onClose }: { onClose: () => void }) => {
   const [sn, setSn] = useState(sheets[0]?.name || '');
   const [cat, setCat] = useState('');
   const [val, setVal] = useState('');
+  const [type, setType] = useState<'pie'|'bar'|'line'>('pie');
   const s = sheets.find(x => x.name === sn) || sheets[0];
   return (
     <Overlay onClose={onClose}>
       <div style={{ fontWeight: 700, marginBottom: '1rem' }}>Add Chart</div>
       {sheets.length > 1 && <div style={{ marginBottom: 8 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Table</label><select value={sn} onChange={e => { setSn(e.target.value); setCat(''); setVal(''); }} style={sel}>{sheets.map(x => <option key={x.name} value={x.name}>{x.name}</option>)}</select></div>}
-      <div style={{ marginBottom: 8 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Group By</label><select value={cat} onChange={e => setCat(e.target.value)} style={sel}><option value="">Select column...</option>{s && [...s.categoricalCols, ...s.dateCols].map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-      <div style={{ marginBottom: 12 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Value</label><select value={val} onChange={e => setVal(e.target.value)} style={sel}><option value="">Select column...</option>{s?.numericCols.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+        <div style={{ flex: 1 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Group By</label><select value={cat} onChange={e => setCat(e.target.value)} style={sel}><option value="">Select...</option>{s && [...s.categoricalCols, ...s.dateCols].map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+        <div style={{ flex: 1 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Value</label><select value={val} onChange={e => setVal(e.target.value)} style={sel}><option value="">Select...</option>{s?.numericCols.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+      </div>
+      <div style={{ marginBottom: 12 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Chart Type</label><select value={type} onChange={e => setType(e.target.value as any)} style={sel}><option value="pie">Pie Chart</option><option value="bar">Bar (Column) Chart</option><option value="line">Line Chart</option></select></div>
       <div style={{ display: 'flex', gap: 8 }}>
         <button onClick={onClose} style={{ flex: 1, padding: '0.5rem', borderRadius: 6, background: '#f1f3f4', fontWeight: 600, fontSize: '0.8rem', border: '1px solid #e8eaed' }}>Cancel</button>
-        <button disabled={!cat || !val} onClick={() => { addChart(sn, cat, val); onClose(); }} style={{ flex: 1, padding: '0.5rem', borderRadius: 6, background: cat && val ? 'var(--primary)' : '#e8eaed', color: cat && val ? 'white' : '#80868b', fontWeight: 600, fontSize: '0.8rem' }}>Add</button>
+        <button disabled={!cat || !val} onClick={() => { addChart(sn, cat, val, type); onClose(); }} style={{ flex: 1, padding: '0.5rem', borderRadius: 6, background: cat && val ? 'var(--primary)' : '#e8eaed', color: cat && val ? 'white' : '#80868b', fontWeight: 600, fontSize: '0.8rem' }}>Add</button>
       </div>
     </Overlay>
   );
@@ -237,49 +254,51 @@ export const DashboardView = () => {
           map.set(key, (map.get(key) || 0) + (isFinite(n) ? n : 0));
         });
         const data = Array.from(map.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => Math.abs(b.value) - Math.abs(a.value)).slice(0, 12);
-        return { id: c.id, title: c.title, data };
+        return { id: c.id, title: c.title, type: c.type, data };
       });
     });
   }, [sheets, chartConfigs, getFilteredRecords]);
 
-  // Row 1: small charts (up to 2), Row 2: large charts (up to 3)
+  // Max charts allowed based on Power BI layout: 2 small, 3 large (total 5)
   const smallCharts = allCharts.slice(0, 2);
-  const largeCharts = allCharts.slice(2);
+  const largeCharts = allCharts.slice(2, 5); // strict cut off to protect layout
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0, padding: '0.6rem 1rem', gap: '0.5rem' }}>
 
-      {/* KPI Row */}
+      {/* KPI Row (Max 4 for layout protection, plus Add button) */}
       <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0, alignItems: 'stretch' }}>
-        {allKpis.map(k => (
+        {allKpis.slice(0, 4).map(k => (
           <KPICard key={k.id} label={k.label} value={k.value} onRemove={() => removeKpi(k.id)} />
         ))}
-        <button onClick={() => setShowKpiModal(true)} style={{
-          background: '#f1f3f4', border: '1px dashed #dadce0', borderRadius: 6,
-          padding: '0.5rem 0.75rem', fontSize: '0.65rem', fontWeight: 600, color: 'var(--primary)',
-          display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0,
-        }}>
-          <Plus size={11} /> KPI
-        </button>
+        {allKpis.length < 4 && (
+          <button onClick={() => setShowKpiModal(true)} style={{
+            background: '#f1f3f4', border: '1px dashed #dadce0', borderRadius: 6,
+            padding: '0.5rem 0.75rem', fontSize: '0.65rem', fontWeight: 600, color: 'var(--primary)',
+            display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0,
+          }}>
+            <Plus size={11} /> KPI
+          </button>
+        )}
       </div>
 
-      {/* Chart Row 1: Small donuts */}
+      {/* Chart Row 1: Small charts */}
       {smallCharts.length > 0 && (
         <div style={{ display: 'flex', gap: '0.5rem', flex: 1, minHeight: 0 }}>
           {smallCharts.map(c => (
             <div key={c.id} style={{ flex: 1, minHeight: 0 }}>
-              <DonutChart title={c.title} data={c.data} onRemove={() => removeChart(c.id)} size="sm" />
+              <GenericChart title={c.title} data={c.data} type={c.type} onRemove={() => removeChart(c.id)} size="sm" />
             </div>
           ))}
         </div>
       )}
 
-      {/* Chart Row 2: Large donuts */}
+      {/* Chart Row 2: Large charts */}
       {largeCharts.length > 0 && (
         <div style={{ display: 'flex', gap: '0.5rem', flex: 1.2, minHeight: 0 }}>
           {largeCharts.map(c => (
             <div key={c.id} style={{ flex: 1, minHeight: 0 }}>
-              <DonutChart title={c.title} data={c.data} onRemove={() => removeChart(c.id)} size="lg" />
+              <GenericChart title={c.title} data={c.data} type={c.type} onRemove={() => removeChart(c.id)} size="lg" />
             </div>
           ))}
         </div>
