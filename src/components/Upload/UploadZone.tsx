@@ -111,33 +111,6 @@ export const UploadZone = () => {
         <input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={handleChange} />
       </div>
 
-      {/* Features */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
-        gap: '1rem',
-        maxWidth: 560,
-        width: '100%'
-      }}>
-        {[
-          { icon: '🔍', title: 'Auto-Detect', desc: 'Reads every sheet & table automatically' },
-          { icon: '🧠', title: 'AI Analysis', desc: 'Finds key metrics & groupings for you' },
-          { icon: '📊', title: 'Instant Charts', desc: 'Professional visuals in seconds' }
-        ].map(f => (
-          <div key={f.title} style={{
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            padding: '1rem',
-            textAlign: 'center',
-            boxShadow: 'var(--shadow-sm)'
-          }}>
-            <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>{f.icon}</div>
-            <div style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--foreground)', marginBottom: '0.25rem' }}>{f.title}</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--foreground-muted)', lineHeight: 1.4 }}>{f.desc}</div>
-          </div>
-        ))}
-      </div>
     </div>
   );
 };
