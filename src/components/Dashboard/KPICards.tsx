@@ -12,7 +12,11 @@ export const KPICards = () => {
 
     const results: Record<string, number> = {};
     schema.numericCols.forEach(col => {
-      results[col] = filteredData.reduce((sum, item) => sum + (Number(item[col]) || 0), 0);
+      results[col] = filteredData.reduce((sum, item) => {
+        const val = item[col];
+        const num = typeof val === 'number' ? val : Number(String(val).replace(/[,$%€£\s]/g, ''));
+        return sum + (isNaN(num) ? 0 : num);
+      }, 0);
     });
 
     return results;
@@ -21,25 +25,26 @@ export const KPICards = () => {
   if (!metrics || !schema) return null;
 
   const formatNumber = (val: number) => {
-    if (val > 1000) {
-      return new Intl.NumberFormat('en-US', { notation: "compact", maximumFractionDigits: 1 }).format(val);
-    }
+    const abs = Math.abs(val);
+    if (abs >= 1e9) return (val / 1e9).toFixed(2) + 'bn';
+    if (abs >= 1e6) return (val / 1e6).toFixed(2) + 'M';
+    if (abs >= 1e3) return (val / 1e3).toFixed(2) + 'K';
     return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(val);
   };
 
   return (
     <div className={styles.grid}>
-      <div className={`${styles.card} glass-panel animate-fade-in delay-100`}>
-        <div className={styles.title}>Total Records</div>
+      <div className={`${styles.card} glass-panel animate-fade-in`}>
+        <div className={styles.title}>Records</div>
         <div className={styles.value}>{filteredData.length.toLocaleString()}</div>
-        <div className={styles.trend}>Rows in dataset</div>
+        <div className={styles.subtitle}>Total rows</div>
       </div>
 
       {schema.numericCols.map((col, idx) => (
-        <div key={col} className={`${styles.card} glass-panel animate-fade-in`} style={{ animationDelay: `${(idx + 2) * 100}ms` }}>
-          <div className={styles.title}>Total {col}</div>
+        <div key={col} className={`${styles.card} glass-panel animate-fade-in`} style={{ animationDelay: `${(idx + 1) * 80}ms` }}>
+          <div className={styles.title}>Sum of {col}</div>
           <div className={styles.value}>{formatNumber(metrics[col])}</div>
-          <div className={styles.trend}>Sum of values</div>
+          <div className={styles.subtitle}>Total</div>
         </div>
       ))}
     </div>

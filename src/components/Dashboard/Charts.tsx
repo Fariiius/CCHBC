@@ -1,147 +1,140 @@
 "use client";
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import ReactECharts from 'echarts-for-react';
-import { useDashboard } from '@/context/DashboardContext';
+import { useDashboard, ChartConfig } from '@/context/DashboardContext';
+import { X, Plus } from 'lucide-react';
 import styles from './Charts.module.css';
 
-export const Charts = () => {
-  const { filteredData, schema } = useDashboard();
+const COLORS = [
+  '#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444',
+  '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1',
+  '#14b8a6', '#e11d48', '#a855f7', '#0ea5e9', '#eab308'
+];
 
-  if (!schema || schema.numericCols.length === 0) return null;
-
-  const numCol = schema.numericCols[0];
-  const catCol1 = schema.categoricalCols[0];
-  const catCol2 = schema.categoricalCols.length > 1 ? schema.categoricalCols[1] : schema.categoricalCols[0];
-  const dateCol = schema.dateCols[0];
-
-  const categoryData = useMemo(() => {
-    if (!catCol1) return [];
+const PieChart = ({ config, data, onRemove }: { config: ChartConfig, data: any[], onRemove: () => void }) => {
+  const chartData = useMemo(() => {
     const map = new Map<string, number>();
-    filteredData.forEach(d => {
-      const key = String(d[catCol1]);
-      map.set(key, (map.get(key) || 0) + (Number(d[numCol]) || 0));
+    data.forEach(d => {
+      const key = String(d[config.categoryCol] ?? 'Unknown');
+      const val = typeof d[config.valueCol] === 'number'
+        ? d[config.valueCol]
+        : Number(String(d[config.valueCol]).replace(/[,$%€£\s]/g, '')) || 0;
+      map.set(key, (map.get(key) || 0) + val);
     });
-    return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
-  }, [filteredData, catCol1, numCol]);
+    return Array.from(map.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [data, config]);
 
-  const barData = useMemo(() => {
-    if (!catCol2) return { names: [], values: [] };
-    const map = new Map<string, number>();
-    filteredData.forEach(d => {
-      const key = String(d[catCol2]);
-      map.set(key, (map.get(key) || 0) + (Number(d[numCol]) || 0));
-    });
-    const sorted = Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
-    return {
-      names: sorted.map(d => d[0]),
-      values: sorted.map(d => d[1])
-    };
-  }, [filteredData, catCol2, numCol]);
-
-  const trendData = useMemo(() => {
-    if (!dateCol) return { dates: [], values: [] };
-    const map = new Map<string, number>();
-    filteredData.forEach(d => {
-      const key = String(d[dateCol]); // simple grouping by exact date value for now
-      map.set(key, (map.get(key) || 0) + (Number(d[numCol]) || 0));
-    });
-    const sorted = Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-    return {
-      dates: sorted.map(d => d[0]),
-      values: sorted.map(d => d[1])
-    };
-  }, [filteredData, dateCol, numCol]);
-
-  const commonOptions = {
-    textStyle: { fontFamily: 'var(--font-sans)', color: 'var(--foreground)' },
-    tooltip: { trigger: 'item', backgroundColor: 'var(--card)', borderColor: 'var(--border)', textStyle: { color: 'var(--foreground)' } }
+  const option = {
+    color: COLORS,
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: 'rgba(15, 23, 42, 0.95)',
+      borderColor: 'rgba(255,255,255,0.1)',
+      textStyle: { color: '#f8fafc', fontSize: 12 },
+      formatter: (params: any) => {
+        return `<strong>${params.name}</strong><br/>${params.value.toLocaleString()} (${params.percent}%)`;
+      }
+    },
+    series: [{
+      type: 'pie',
+      radius: ['30%', '70%'],
+      center: ['50%', '55%'],
+      avoidLabelOverlap: true,
+      itemStyle: { borderRadius: 6, borderColor: 'rgba(15, 23, 42, 0.7)', borderWidth: 2 },
+      label: {
+        show: true,
+        formatter: '{b} {d}%',
+        fontSize: 10,
+        color: '#94a3b8'
+      },
+      emphasis: {
+        label: { show: true, fontSize: 13, fontWeight: 'bold', color: '#f8fafc' },
+        itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: 'rgba(0, 0, 0, 0.5)' }
+      },
+      data: chartData
+    }]
   };
 
-  const donutOptions = catCol1 ? {
-    ...commonOptions,
-    color: ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'],
-    series: [
-      {
-        name: numCol,
-        type: 'pie',
-        radius: ['40%', '70%'],
-        avoidLabelOverlap: false,
-        itemStyle: { borderRadius: 10, borderColor: 'var(--card)', borderWidth: 2 },
-        label: { show: false, position: 'center' },
-        emphasis: {
-          label: { show: true, fontSize: 16, fontWeight: 'bold' }
-        },
-        labelLine: { show: false },
-        data: categoryData
-      }
-    ]
-  } : null;
+  return (
+    <div className={`${styles.chartCard} glass-panel animate-fade-in`}>
+      <div className={styles.chartHeader}>
+        <h3 className={styles.chartTitle}>{config.title}</h3>
+        <button className={styles.removeBtn} onClick={onRemove} title="Remove chart">
+          <X size={16} />
+        </button>
+      </div>
+      <ReactECharts option={option} style={{ height: '100%', width: '100%' }} />
+    </div>
+  );
+};
 
-  const barOptions = catCol2 ? {
-    ...commonOptions,
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-    xAxis: { type: 'value', splitLine: { lineStyle: { color: 'var(--border)' } } },
-    yAxis: { type: 'category', data: barData.names, axisLine: { lineStyle: { color: 'var(--border)' } } },
-    series: [
-      {
-        name: numCol,
-        type: 'bar',
-        data: barData.values,
-        itemStyle: {
-          color: '#3b82f6',
-          borderRadius: [0, 4, 4, 0]
-        }
-      }
-    ]
-  } : null;
+const AddChartModal = ({ onClose }: { onClose: () => void }) => {
+  const { schema, addChart } = useDashboard();
+  const [catCol, setCatCol] = useState('');
+  const [valCol, setValCol] = useState('');
 
-  const lineOptions = dateCol ? {
-    ...commonOptions,
-    tooltip: { trigger: 'axis' },
-    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-    xAxis: { type: 'category', boundaryGap: false, data: trendData.dates, axisLine: { lineStyle: { color: 'var(--border)' } } },
-    yAxis: { type: 'value', splitLine: { lineStyle: { color: 'var(--border)' } } },
-    series: [
-      {
-        name: numCol,
-        type: 'line',
-        data: trendData.values,
-        smooth: true,
-        symbol: 'none',
-        areaStyle: {
-          color: {
-            type: 'linear',
-            x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [{ offset: 0, color: 'rgba(59,130,246,0.5)' }, { offset: 1, color: 'rgba(59,130,246,0)' }]
-          }
-        },
-        lineStyle: { width: 3, color: '#3b82f6' }
-      }
-    ]
-  } : null;
+  if (!schema) return null;
+
+  const allGroupCols = [...schema.categoricalCols, ...schema.dateCols];
+
+  const handleAdd = () => {
+    if (catCol && valCol) {
+      addChart(catCol, valCol);
+      onClose();
+    }
+  };
 
   return (
-    <div className={styles.chartsGrid}>
-      {donutOptions && (
-        <div className={`${styles.chartCard} glass-panel animate-fade-in delay-100`}>
-          <h3 className={styles.chartTitle}>{numCol} by {catCol1}</h3>
-          <ReactECharts option={donutOptions} style={{ height: '100%', width: '100%' }} />
+    <div className={styles.modalOverlay} onClick={onClose}>
+      <div className={styles.modal} onClick={e => e.stopPropagation()}>
+        <h2>Add New Chart</h2>
+        <div className={styles.formGroup}>
+          <label>Group By (Category)</label>
+          <select value={catCol} onChange={e => setCatCol(e.target.value)}>
+            <option value="">Select column...</option>
+            {allGroupCols.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
         </div>
-      )}
-      {barOptions && (
-        <div className={`${styles.chartCard} glass-panel animate-fade-in delay-200`}>
-          <h3 className={styles.chartTitle}>{numCol} by {catCol2}</h3>
-          <ReactECharts option={barOptions} style={{ height: '100%', width: '100%' }} />
+        <div className={styles.formGroup}>
+          <label>Value (Numeric)</label>
+          <select value={valCol} onChange={e => setValCol(e.target.value)}>
+            <option value="">Select column...</option>
+            {schema.numericCols.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
         </div>
-      )}
-      {lineOptions && (
-        <div className={`${styles.chartCard} ${styles.fullWidth} glass-panel animate-fade-in delay-300`}>
-          <h3 className={styles.chartTitle}>{numCol} Trend over {dateCol}</h3>
-          <ReactECharts option={lineOptions} style={{ height: '100%', width: '100%' }} />
+        <div className={styles.modalActions}>
+          <button className={styles.cancelBtn} onClick={onClose}>Cancel</button>
+          <button className={styles.addBtn} onClick={handleAdd} disabled={!catCol || !valCol}>Add Chart</button>
         </div>
-      )}
+      </div>
     </div>
+  );
+};
+
+export const Charts = () => {
+  const { filteredData, chartConfigs, removeChart } = useDashboard();
+  const [showModal, setShowModal] = useState(false);
+
+  return (
+    <>
+      <div className={styles.chartsGrid}>
+        {chartConfigs.map(config => (
+          <PieChart
+            key={config.id}
+            config={config}
+            data={filteredData}
+            onRemove={() => removeChart(config.id)}
+          />
+        ))}
+        <button className={styles.addChartCard} onClick={() => setShowModal(true)}>
+          <Plus size={32} />
+          <span>Add Chart</span>
+        </button>
+      </div>
+      {showModal && <AddChartModal onClose={() => setShowModal(false)} />}
+    </>
   );
 };
