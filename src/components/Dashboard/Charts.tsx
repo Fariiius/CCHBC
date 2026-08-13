@@ -7,7 +7,8 @@ import { X, Plus } from 'lucide-react';
 
 const COLORS = ['#1a73e8','#34a853','#fbbc04','#ea4335','#9c27b0','#00bcd4','#ff7043','#607d8b','#43a047','#e91e63','#ff9800','#795548','#3f51b5','#009688','#8bc34a'];
 
-const fmt = (v: number): string => {
+const fmt = (v: number, isPercent = false): string => {
+  if (isPercent) return v.toFixed(1) + '%';
   const a = Math.abs(v), s = v < 0 ? '-' : '';
   if (a >= 1e9) return s + (a/1e9).toFixed(2) + 'bn';
   if (a >= 1e6) return s + (a/1e6).toFixed(2) + 'M';
@@ -24,7 +25,8 @@ export const FilterBar = () => {
     const map = new Map<string, Set<string>>();
     sheets.forEach(sheet => {
       [...sheet.categoricalCols, ...sheet.dateCols].forEach(col => {
-        const vals = new Set(sheet.records.map(r => String(r[col] ?? '')).filter(v => v && v !== 'undefined' && v !== 'null'));
+        // Exclude 'Total' from filters as well
+        const vals = new Set(sheet.records.map(r => String(r[col] ?? '')).filter(v => v && v !== 'undefined' && v !== 'null' && !v.toLowerCase().includes('total')));
         if (vals.size >= 2 && vals.size <= 20) {
           if (!map.has(col)) map.set(col, new Set());
           vals.forEach(v => map.get(col)!.add(v));
@@ -73,7 +75,7 @@ export const FilterBar = () => {
 
 // ── KPI Card (Power BI style) ───────────────────────────────────────────────
 
-const KPICard = ({ label, value, onRemove }: { label: string; value: number; onRemove: () => void }) => {
+const KPICard = ({ label, value, onRemove, isPercent = false }: { label: string; value: number; onRemove?: () => void; isPercent?: boolean }) => {
   const [h, setH] = useState(false);
   return (
     <div onMouseOver={() => setH(true)} onMouseOut={() => setH(false)} style={{
@@ -81,15 +83,17 @@ const KPICard = ({ label, value, onRemove }: { label: string; value: number; onR
       padding: '0.65rem 1rem', position: 'relative', flex: 1, minWidth: 0,
       textAlign: 'center',
     }}>
-      <button onClick={onRemove} style={{
-        position: 'absolute', top: 3, right: 3, opacity: h ? 1 : 0, padding: 2,
-        borderRadius: 4, transition: 'opacity 0.1s', color: '#94a3b8',
-      }}><X size={10} /></button>
-      <div style={{ fontSize: '1.5rem', fontWeight: 800, color: value < 0 ? '#d93025' : 'var(--foreground)', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
-        {fmt(value)}
+      {onRemove && (
+        <button onClick={onRemove} style={{
+          position: 'absolute', top: 3, right: 3, opacity: h ? 1 : 0, padding: 2,
+          borderRadius: 4, transition: 'opacity 0.1s', color: '#94a3b8',
+        }}><X size={10} /></button>
+      )}
+      <div style={{ fontSize: '1.5rem', fontWeight: 800, color: value < 0 && !isPercent ? '#d93025' : 'var(--foreground)', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
+        {fmt(value, isPercent)}
       </div>
       <div style={{ fontSize: '0.62rem', color: '#5f6368', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-        Sum of {label}
+        {label}
       </div>
     </div>
   );
@@ -229,6 +233,9 @@ export const DashboardView = () => {
   const [showChartModal, setShowChartModal] = useState(false);
 
   // Collect all KPIs across all sheets
+  let totalSpend = 0;
+  let totalSaving = 0;
+
   const allKpis = useMemo(() => {
     return sheets.flatMap(sheet => {
       const filtered = getFilteredRecords(sheet.name);
@@ -236,10 +243,26 @@ export const DashboardView = () => {
         const total = filtered.reduce((s, r) => {
           const v = r[k.col]; const n = typeof v === 'number' ? v : Number(String(v).replace(/[,$%€£\s]/g, '')); return s + (isFinite(n) ? n : 0);
         }, 0);
-        return { id: k.id, label: k.col, value: total };
+
+        let label = `Sum of ${k.col}`;
+        const lcol = k.col.toLowerCase();
+        
+        // Match user's exact requested labels
+        if (lcol.includes('spend')) {
+          label = 'Sum YTD Spend';
+          totalSpend += total;
+        } else if (lcol.includes('saving')) {
+          label = 'Sum YTD Saving';
+          totalSaving += total;
+        }
+
+        return { id: k.id, label, value: total };
       });
     });
   }, [sheets, kpiConfigs, getFilteredRecords]);
+
+  // Calculate the custom KPI the user asked for: Saving vs Spending Percentage
+  const savingVsSpendingPct = (totalSpend !== 0 && totalSaving !== 0) ? Math.abs((totalSaving / totalSpend) * 100) : null;
 
   // Collect all charts across all sheets
   const allCharts = useMemo(() => {
@@ -249,7 +272,9 @@ export const DashboardView = () => {
         const map = new Map<string, number>();
         filtered.forEach(r => {
           const key = String(r[c.categoryCol] ?? '').trim();
-          if (!key || key === 'undefined') return;
+          // COMPLETELY IGNORE "Total" ROWS FROM CHARTS (User request)
+          if (!key || key === 'undefined' || key.toLowerCase().includes('total')) return;
+          
           const v = r[c.valueCol]; const n = typeof v === 'number' ? v : Number(String(v).replace(/[,$%€£\s]/g, ''));
           map.set(key, (map.get(key) || 0) + (isFinite(n) ? n : 0));
         });
@@ -266,12 +291,16 @@ export const DashboardView = () => {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0, padding: '0.6rem 1rem', gap: '0.5rem' }}>
 
-      {/* KPI Row (Max 4 for layout protection, plus Add button) */}
+      {/* KPI Row */}
       <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0, alignItems: 'stretch' }}>
-        {allKpis.slice(0, 4).map(k => (
+        {allKpis.slice(0, 3).map(k => (
           <KPICard key={k.id} label={k.label} value={k.value} onRemove={() => removeKpi(k.id)} />
         ))}
-        {allKpis.length < 4 && (
+        {/* Inject the custom Saving vs Spending % KPI if applicable */}
+        {savingVsSpendingPct !== null && (
+          <KPICard label="Saving vs Spending %" value={savingVsSpendingPct} isPercent={true} />
+        )}
+        {(allKpis.length + (savingVsSpendingPct !== null ? 1 : 0)) < 4 && (
           <button onClick={() => setShowKpiModal(true)} style={{
             background: '#f1f3f4', border: '1px dashed #dadce0', borderRadius: 6,
             padding: '0.5rem 0.75rem', fontSize: '0.65rem', fontWeight: 600, color: 'var(--primary)',
