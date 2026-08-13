@@ -414,6 +414,21 @@ const SheetSection = ({ sheet }: { sheet: SheetAnalysis }) => {
 export const DashboardView = () => {
   const { sheets, activeSheet } = useDashboard();
   
+  if (activeSheet === 'Master Summary') {
+    return (
+      <main style={{ padding: '1.5rem 2rem', maxWidth: 1600, margin: '0 auto', width: '100%' }}>
+        {sheets.map(sheet => (
+          <div key={sheet.name} style={{ marginBottom: '4rem' }}>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '1rem', color: 'var(--foreground)', borderBottom: '2px solid var(--border)', paddingBottom: '0.5rem' }}>
+              {sheet.name}
+            </h2>
+            <SheetSection sheet={sheet} />
+          </div>
+        ))}
+      </main>
+    );
+  }
+
   const currentSheet = sheets.find(s => s.name === activeSheet);
 
   if (!currentSheet) return null;

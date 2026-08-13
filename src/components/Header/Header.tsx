@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { UploadCloud, FileSpreadsheet } from 'lucide-react';
 import { useDashboard } from '@/context/DashboardContext';
 
@@ -48,23 +48,33 @@ export const Header = () => {
         </div>
 
         {/* Sheet Tabs */}
-        {sheets.length > 1 && (
+        {sheets.length > 0 && (
           <div style={{ display: 'flex', gap: '0.25rem', height: '100%', alignItems: 'center' }}>
             <div style={{ width: 1, height: 24, background: 'var(--border)', marginRight: '1rem' }} />
+            
+            <button
+              onClick={() => setActiveSheet('Master Summary')}
+              style={{
+                padding: '0.4rem 1rem', fontSize: '0.8rem',
+                fontWeight: activeSheet === 'Master Summary' ? 800 : 600,
+                color: activeSheet === 'Master Summary' ? 'white' : 'var(--foreground)',
+                background: activeSheet === 'Master Summary' ? 'var(--primary)' : '#e2e8f0',
+                border: 'none', borderRadius: 8, cursor: 'pointer', transition: 'all 0.15s'
+              }}
+            >
+              ★ Master Summary
+            </button>
+
             {sheets.map(s => (
               <button
                 key={s.name}
                 onClick={() => setActiveSheet(s.name)}
                 style={{
-                  padding: '0.4rem 1rem',
-                  fontSize: '0.8rem',
+                  padding: '0.4rem 1rem', fontSize: '0.8rem',
                   fontWeight: activeSheet === s.name ? 700 : 500,
                   color: activeSheet === s.name ? 'var(--primary)' : 'var(--foreground-muted)',
                   background: activeSheet === s.name ? 'var(--primary-light)' : 'transparent',
-                  border: 'none',
-                  borderRadius: 8,
-                  cursor: 'pointer',
-                  transition: 'all 0.15s'
+                  border: 'none', borderRadius: 8, cursor: 'pointer', transition: 'all 0.15s'
                 }}
                 onMouseOver={e => { if (activeSheet !== s.name) e.currentTarget.style.background = 'var(--surface-2)'; }}
                 onMouseOut={e => { if (activeSheet !== s.name) e.currentTarget.style.background = 'transparent'; }}
@@ -103,21 +113,29 @@ export const Header = () => {
 };
 
 export const FiltersBar = () => {
-  const { sheets, activeSheet, globalFilters, toggleFilter, resetFilters } = useDashboard();
-  if (!activeSheet) return null;
+  const { sheets, masterFilters, toggleFilter, resetFilters } = useDashboard();
   
-  const sheet = sheets.find(s => s.name === activeSheet);
-  if (!sheet) return null;
+  const allFilterableCols = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    sheets.forEach(sheet => {
+      [...sheet.categoricalCols, ...sheet.dateCols].forEach(col => {
+        const unique = new Set(sheet.records.map(r => String(r[col] ?? '')));
+        if (unique.size >= 2 && unique.size <= 30) {
+          if (!map.has(col)) map.set(col, new Set());
+          unique.forEach(v => {
+            if (v && v.trim() !== 'undefined' && v.trim() !== 'null') map.get(col)!.add(v);
+          });
+        }
+      });
+    });
+    return Array.from(map.entries())
+      .filter(([_, set]) => set.size >= 2 && set.size <= 30)
+      .map(([col, set]) => ({ col, values: Array.from(set).sort() }));
+  }, [sheets]);
 
-  const filterableCols = [...sheet.categoricalCols, ...sheet.dateCols].filter(col => {
-    const unique = new Set(sheet.records.map(r => String(r[col] ?? ''))).size;
-    return unique >= 2 && unique <= 20;
-  });
+  if (allFilterableCols.length === 0) return null;
 
-  if (filterableCols.length === 0) return null;
-
-  const sheetFilters = globalFilters[activeSheet] || {};
-  const hasActive = Object.values(sheetFilters).some(v => v.length > 0);
+  const hasActive = Object.values(masterFilters).some(v => v.length > 0);
 
   return (
     <div style={{
@@ -129,19 +147,18 @@ export const FiltersBar = () => {
       gap: '0.5rem',
       alignItems: 'center'
     }}>
-      {filterableCols.map((col, i) => {
-        const unique = Array.from(new Set(sheet.records.map(r => String(r[col] ?? '')))).filter(Boolean).sort();
-        const activeVals = sheetFilters[col] || [];
+      {allFilterableCols.map(({ col, values }, i) => {
+        const activeVals = masterFilters[col] || [];
         return (
           <React.Fragment key={col}>
             {i > 0 && <div style={{ width: 1, height: 20, background: 'var(--border)' }} />}
             <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--foreground-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: 2 }}>
               {col}
             </span>
-            {unique.map(val => (
+            {values.map(val => (
               <button
                 key={val}
-                onClick={() => toggleFilter(activeSheet, col, val)}
+                onClick={() => toggleFilter(col, val)}
                 style={{
                   padding: '0.2rem 0.65rem',
                   borderRadius: 999,

@@ -39,8 +39,9 @@ interface DashboardContextProps {
   fileName: string;
   activeSheet: string | null;
   setActiveSheet: (name: string) => void;
-  globalFilters: Record<string, Record<string, string[]>>;
-  toggleFilter: (sheet: string, col: string, val: string) => void;
+  // Master Filters: Column Name -> Selected Values (applies to ALL tables with this column)
+  masterFilters: Record<string, string[]>;
+  toggleFilter: (col: string, val: string) => void;
   resetFilters: () => void;
   handleFileUpload: (file: File) => Promise<void>;
   resetDashboard: () => void;
@@ -92,11 +93,80 @@ const isIgnoredNumericCol = (colName: string, values: number[]): boolean => {
   return false;
 };
 
-const analyzeSheet = (name: string, rawArray: any[][]): SheetAnalysis => {
-  if (!rawArray || rawArray.length === 0) {
-    return { name, records: [], numericCols: [], categoricalCols: [], dateCols: [], allCols: [], kpis: [], topGroups: [], rowCount: 0, isEmpty: true };
+// Advanced Grid Detection: Split scattered tables into blocks
+const splitIntoBlocks = (rawArray: any[][]): any[][][] => {
+  if (!rawArray || rawArray.length === 0) return [];
+  
+  interface Cell { r: number; c: number; }
+  const cells: Cell[] = [];
+  for (let r = 0; r < rawArray.length; r++) {
+    if (!rawArray[r]) continue;
+    for (let c = 0; c < rawArray[r].length; c++) {
+      const v = rawArray[r][c];
+      if (v !== undefined && v !== null && String(v).trim() !== '') {
+        cells.push({ r, c });
+      }
+    }
   }
 
+  if (cells.length === 0) return [];
+
+  const parent = new Map<string, string>();
+  const makeId = (c: Cell) => `${c.r},${c.c}`;
+  const find = (id: string): string => {
+    if (parent.get(id) !== id) parent.set(id, find(parent.get(id)!));
+    return parent.get(id)!;
+  };
+  const union = (id1: string, id2: string) => {
+    parent.set(find(id1), find(id2));
+  };
+
+  cells.forEach(c => parent.set(makeId(c), makeId(c)));
+  const cellMap = new Set(cells.map(makeId));
+
+  for (const c of cells) {
+    const id = makeId(c);
+    for (let dr = -2; dr <= 2; dr++) {
+      for (let dc = -2; dc <= 2; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        const nid = `${c.r + dr},${c.c + dc}`;
+        if (cellMap.has(nid)) union(id, nid);
+      }
+    }
+  }
+
+  const groups = new Map<string, Cell[]>();
+  cells.forEach(c => {
+    const root = find(makeId(c));
+    if (!groups.has(root)) groups.set(root, []);
+    groups.get(root)!.push(c);
+  });
+
+  const blocks: any[][][] = [];
+  groups.forEach(group => {
+    let minR = Infinity, maxR = -Infinity, minC = Infinity, maxC = -Infinity;
+    group.forEach(c => {
+      minR = Math.min(minR, c.r); maxR = Math.max(maxR, c.r);
+      minC = Math.min(minC, c.c); maxC = Math.max(maxC, c.c);
+    });
+
+    if (maxR - minR >= 1 && maxC - minC >= 1) {
+      const block: any[][] = [];
+      for (let r = minR; r <= maxR; r++) {
+        const row = [];
+        for (let c = minC; c <= maxC; c++) {
+          row.push(rawArray[r]?.[c]);
+        }
+        block.push(row);
+      }
+      blocks.push(block);
+    }
+  });
+
+  return blocks.length > 0 ? blocks : [rawArray];
+};
+
+const analyzeSheet = (name: string, rawArray: any[][]): SheetAnalysis => {
   let headerRowIdx = 0;
   let maxStrings = 0;
 
@@ -207,13 +277,15 @@ const analyzeSheet = (name: string, rawArray: any[][]): SheetAnalysis => {
   return { name, records, numericCols, categoricalCols, dateCols, allCols, kpis, topGroups, rowCount: records.length, isEmpty: false };
 };
 
+// ─── Provider ───────────────────────────────────────────────────────────────
+
 export const DashboardProvider = ({ children }: { children: ReactNode }) => {
   const [sheets, setSheets] = useState<SheetAnalysis[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState('');
   const [activeSheet, setActiveSheet] = useState<string | null>(null);
-  const [globalFilters, setGlobalFilters] = useState<Record<string, Record<string, string[]>>>({});
+  const [masterFilters, setMasterFilters] = useState<Record<string, string[]>>({});
   const [chartConfigs, setChartConfigs] = useState<ChartConfig[]>([]);
   const [kpiConfigs, setKpiConfigs] = useState<KpiConfig[]>([]);
 
@@ -224,13 +296,23 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
       const buffer = await file.arrayBuffer();
       const wb = xlsx.read(buffer, { type: 'buffer', cellDates: true });
 
-      const analyzed: SheetAnalysis[] = wb.SheetNames.map(name => {
-        const ws = wb.Sheets[name];
-        const rawArray = xlsx.utils.sheet_to_json(ws, { header: 1 }) as any[][];
-        return analyzeSheet(name, rawArray);
-      }).filter(s => !s.isEmpty);
+      let analyzed: SheetAnalysis[] = [];
 
-      if (analyzed.length === 0) throw new Error('No readable data found in this file. Please ensure the file has data.');
+      wb.SheetNames.forEach(sheetName => {
+        const ws = wb.Sheets[sheetName];
+        const rawArray = xlsx.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+        
+        // Advanced Grid Detection
+        const blocks = splitIntoBlocks(rawArray);
+        
+        blocks.forEach((block, i) => {
+          const name = blocks.length > 1 ? `${sheetName} (Table ${i + 1})` : sheetName;
+          const analysis = analyzeSheet(name, block);
+          if (!analysis.isEmpty) analyzed.push(analysis);
+        });
+      });
+
+      if (analyzed.length === 0) throw new Error('No readable data found in this file.');
 
       const autoCharts: ChartConfig[] = [];
       const autoKpis: KpiConfig[] = [];
@@ -257,11 +339,8 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
       setChartConfigs(autoCharts);
       setKpiConfigs(autoKpis);
       setFileName(file.name);
-      setActiveSheet(analyzed[0].name);
-
-      const initFilters: Record<string, Record<string, string[]>> = {};
-      analyzed.forEach(sheet => { initFilters[sheet.name] = {}; });
-      setGlobalFilters(initFilters);
+      setActiveSheet('Master Summary');
+      setMasterFilters({});
 
     } catch (err: any) {
       setError(err.message || 'Failed to parse file.');
@@ -270,19 +349,16 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const toggleFilter = (sheet: string, col: string, val: string) => {
-    setGlobalFilters(prev => {
-      const sheetFilters = prev[sheet] || {};
-      const colVals = sheetFilters[col] || [];
+  const toggleFilter = (col: string, val: string) => {
+    setMasterFilters(prev => {
+      const colVals = prev[col] || [];
       const newVals = colVals.includes(val) ? colVals.filter(v => v !== val) : [...colVals, val];
-      return { ...prev, [sheet]: { ...sheetFilters, [col]: newVals } };
+      return { ...prev, [col]: newVals };
     });
   };
 
   const resetFilters = () => {
-    const initFilters: Record<string, Record<string, string[]>> = {};
-    sheets.forEach(s => { initFilters[s.name] = {}; });
-    setGlobalFilters(initFilters);
+    setMasterFilters({});
   };
 
   const resetDashboard = () => {
@@ -291,7 +367,7 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     setKpiConfigs([]);
     setFileName('');
     setActiveSheet(null);
-    setGlobalFilters({});
+    setMasterFilters({});
     setError(null);
   };
 
@@ -318,11 +394,12 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
   const getFilteredRecords = (sheetName: string): DataRecord[] => {
     const sheet = sheets.find(s => s.name === sheetName);
     if (!sheet) return [];
-    const filters = globalFilters[sheetName] || {};
 
     return sheet.records.filter(row => {
-      return Object.entries(filters).every(([col, vals]) => {
+      return Object.entries(masterFilters).every(([col, vals]) => {
         if (!vals || vals.length === 0) return true;
+        // If the table doesn't have this column, don't filter it out, just ignore the filter for this table
+        if (!(col in row)) return true; 
         return vals.includes(String(row[col] ?? ''));
       });
     });
@@ -330,7 +407,7 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <DashboardContext.Provider value={{
-      sheets, loading, error, fileName, activeSheet, setActiveSheet, globalFilters,
+      sheets, loading, error, fileName, activeSheet, setActiveSheet, masterFilters,
       toggleFilter, resetFilters, handleFileUpload, resetDashboard,
       chartConfigs, addChart, removeChart,
       kpiConfigs, addKpi, removeKpi,
