@@ -4,8 +4,8 @@ import React from 'react';
 import { UploadCloud, FileSpreadsheet } from 'lucide-react';
 import { useDashboard } from '@/context/DashboardContext';
 
-export const Header = ({ onAddChart }: { onAddChart?: () => void }) => {
-  const { fileName, resetDashboard, sheets } = useDashboard();
+export const Header = () => {
+  const { fileName, resetDashboard, sheets, activeSheet, setActiveSheet } = useDashboard();
   const totalRows = sheets.reduce((s, sh) => s + sh.rowCount, 0);
 
   return (
@@ -22,28 +22,58 @@ export const Header = ({ onAddChart }: { onAddChart?: () => void }) => {
       zIndex: 100,
       boxShadow: 'var(--shadow-sm)'
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-        <div style={{
-          width: 32,
-          height: 32,
-          background: 'var(--primary)',
-          borderRadius: 8,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
-        }}>
-          <FileSpreadsheet size={18} color="white" />
-        </div>
-        <div>
-          <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--foreground)', lineHeight: 1.2 }}>
-            Analytics Dashboard
+      <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div style={{
+            width: 32,
+            height: 32,
+            background: 'var(--primary)',
+            borderRadius: 8,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <FileSpreadsheet size={18} color="white" />
           </div>
-          {fileName && (
-            <div style={{ fontSize: '0.7rem', color: 'var(--foreground-muted)' }}>
-              {fileName} · {totalRows.toLocaleString()} rows · {sheets.length} sheet{sheets.length !== 1 ? 's' : ''}
+          <div>
+            <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--foreground)', lineHeight: 1.2 }}>
+              Analytics Dashboard
             </div>
-          )}
+            {fileName && (
+              <div style={{ fontSize: '0.7rem', color: 'var(--foreground-muted)' }}>
+                {fileName} · {totalRows.toLocaleString()} rows
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* Sheet Tabs */}
+        {sheets.length > 1 && (
+          <div style={{ display: 'flex', gap: '0.25rem', height: '100%', alignItems: 'center' }}>
+            <div style={{ width: 1, height: 24, background: 'var(--border)', marginRight: '1rem' }} />
+            {sheets.map(s => (
+              <button
+                key={s.name}
+                onClick={() => setActiveSheet(s.name)}
+                style={{
+                  padding: '0.4rem 1rem',
+                  fontSize: '0.8rem',
+                  fontWeight: activeSheet === s.name ? 700 : 500,
+                  color: activeSheet === s.name ? 'var(--primary)' : 'var(--foreground-muted)',
+                  background: activeSheet === s.name ? 'var(--primary-light)' : 'transparent',
+                  border: 'none',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s'
+                }}
+                onMouseOver={e => { if (activeSheet !== s.name) e.currentTarget.style.background = 'var(--surface-2)'; }}
+                onMouseOut={e => { if (activeSheet !== s.name) e.currentTarget.style.background = 'transparent'; }}
+              >
+                {s.name}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {fileName && (
@@ -72,9 +102,11 @@ export const Header = ({ onAddChart }: { onAddChart?: () => void }) => {
   );
 };
 
-export const FiltersBar = ({ sheetName }: { sheetName: string }) => {
-  const { sheets, globalFilters, toggleFilter, resetFilters } = useDashboard();
-  const sheet = sheets.find(s => s.name === sheetName);
+export const FiltersBar = () => {
+  const { sheets, activeSheet, globalFilters, toggleFilter, resetFilters } = useDashboard();
+  if (!activeSheet) return null;
+  
+  const sheet = sheets.find(s => s.name === activeSheet);
   if (!sheet) return null;
 
   const filterableCols = [...sheet.categoricalCols, ...sheet.dateCols].filter(col => {
@@ -84,7 +116,7 @@ export const FiltersBar = ({ sheetName }: { sheetName: string }) => {
 
   if (filterableCols.length === 0) return null;
 
-  const sheetFilters = globalFilters[sheetName] || {};
+  const sheetFilters = globalFilters[activeSheet] || {};
   const hasActive = Object.values(sheetFilters).some(v => v.length > 0);
 
   return (
@@ -109,7 +141,7 @@ export const FiltersBar = ({ sheetName }: { sheetName: string }) => {
             {unique.map(val => (
               <button
                 key={val}
-                onClick={() => toggleFilter(sheetName, col, val)}
+                onClick={() => toggleFilter(activeSheet, col, val)}
                 style={{
                   padding: '0.2rem 0.65rem',
                   borderRadius: 999,

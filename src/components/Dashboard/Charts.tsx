@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { useDashboard, SheetAnalysis } from '@/context/DashboardContext';
-import { X, Plus, ChevronDown, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { X, Plus, TrendingUp, TrendingDown } from 'lucide-react';
 
 const CHART_COLORS = [
   '#1a73e8', '#34a853', '#fbbc04', '#ea4335', '#9c27b0',
@@ -66,11 +66,10 @@ const KPICard = ({ label, value, index }: { label: string; value: number; index:
 // ─── Pie Chart Card ──────────────────────────────────────────────────────────
 
 const PieChartCard = ({
-  title, data, id, onRemove, index
+  title, data, onRemove, index
 }: {
   title: string;
   data: { name: string; value: number; pct: number }[];
-  id: string;
   onRemove: () => void;
   index: number;
 }) => {
@@ -165,13 +164,10 @@ const PieChartCard = ({
 
 // ─── Add Chart Modal ─────────────────────────────────────────────────────────
 
-const AddChartModal = ({ onClose }: { onClose: () => void }) => {
-  const { sheets, addChart } = useDashboard();
-  const [sheetName, setSheetName] = useState(sheets[0]?.name || '');
+const AddChartModal = ({ sheet, onClose }: { sheet: SheetAnalysis, onClose: () => void }) => {
+  const { addChart } = useDashboard();
   const [catCol, setCatCol] = useState('');
   const [valCol, setValCol] = useState('');
-
-  const selectedSheet = sheets.find(s => s.name === sheetName);
 
   const selectStyle: React.CSSProperties = {
     width: '100%', padding: '0.65rem 0.75rem',
@@ -189,23 +185,14 @@ const AddChartModal = ({ onClose }: { onClose: () => void }) => {
         width: 400, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.15)'
       }}>
         <div style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--foreground)', marginBottom: '1.5rem' }}>
-          Add Chart
+          Add Chart to {sheet.name}
         </div>
-
-        {sheets.length > 1 && (
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--foreground-muted)', marginBottom: '0.4rem' }}>Sheet</label>
-            <select value={sheetName} onChange={e => { setSheetName(e.target.value); setCatCol(''); setValCol(''); }} style={selectStyle}>
-              {sheets.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
-            </select>
-          </div>
-        )}
 
         <div style={{ marginBottom: '1rem' }}>
           <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--foreground-muted)', marginBottom: '0.4rem' }}>Group By</label>
           <select value={catCol} onChange={e => setCatCol(e.target.value)} style={selectStyle}>
             <option value="">Select column...</option>
-            {selectedSheet && [...selectedSheet.categoricalCols, ...selectedSheet.dateCols].map(c => <option key={c} value={c}>{c}</option>)}
+            {[...sheet.categoricalCols, ...sheet.dateCols].map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
 
@@ -213,7 +200,7 @@ const AddChartModal = ({ onClose }: { onClose: () => void }) => {
           <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--foreground-muted)', marginBottom: '0.4rem' }}>Value (Numeric)</label>
           <select value={valCol} onChange={e => setValCol(e.target.value)} style={selectStyle}>
             <option value="">Select column...</option>
-            {selectedSheet?.numericCols.map(c => <option key={c} value={c}>{c}</option>)}
+            {sheet.numericCols.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
 
@@ -223,7 +210,7 @@ const AddChartModal = ({ onClose }: { onClose: () => void }) => {
           </button>
           <button
             disabled={!catCol || !valCol}
-            onClick={() => { addChart(sheetName, catCol, valCol); onClose(); }}
+            onClick={() => { addChart(sheet.name, catCol, valCol); onClose(); }}
             style={{
               flex: 1, padding: '0.7rem', borderRadius: 8, background: !catCol || !valCol ? '#e2e8f0' : 'var(--primary)',
               color: !catCol || !valCol ? 'var(--foreground-muted)' : 'white',
@@ -243,18 +230,19 @@ const AddChartModal = ({ onClose }: { onClose: () => void }) => {
 const SheetSection = ({ sheet }: { sheet: SheetAnalysis }) => {
   const { chartConfigs, removeChart, getFilteredRecords } = useDashboard();
   const filteredRecords = getFilteredRecords(sheet.name);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   // Recalculate KPIs with filtered data
   const filteredKPIs = useMemo(() => {
-    return sheet.numericCols.map(col => {
+    return sheet.kpis.map(kpi => {
       const total = filteredRecords.reduce((s, r) => {
-        const v = r[col];
+        const v = r[kpi.col];
         const n = typeof v === 'number' ? v : Number(String(v).replace(/[,$%€£\s]/g, ''));
         return s + (isFinite(n) ? n : 0);
       }, 0);
-      return { label: col, value: total, col };
+      return { label: kpi.col, value: total, col: kpi.col };
     });
-  }, [filteredRecords, sheet.numericCols]);
+  }, [filteredRecords, sheet.kpis]);
 
   // Recalculate chart data with filtered records
   const sheetCharts = chartConfigs.filter(c => c.sheetName === sheet.name);
@@ -276,24 +264,26 @@ const SheetSection = ({ sheet }: { sheet: SheetAnalysis }) => {
   };
 
   return (
-    <section style={{ marginBottom: '2.5rem' }}>
-      {/* Sheet header */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: '0.75rem',
-        marginBottom: '1rem', paddingBottom: '0.75rem',
-        borderBottom: '2px solid var(--border)'
-      }}>
-        <div style={{
-          background: 'var(--primary)', color: 'white',
-          borderRadius: 8, padding: '0.2rem 0.75rem',
-          fontSize: '0.8rem', fontWeight: 700
-        }}>
-          {sheet.name}
-        </div>
-        <span style={{ color: 'var(--foreground-muted)', fontSize: '0.8rem' }}>
-          {filteredRecords.length.toLocaleString()} rows
-          {filteredRecords.length !== sheet.rowCount && ` (filtered from ${sheet.rowCount.toLocaleString()})`}
-        </span>
+    <section>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1.25rem' }}>
+        <button
+          onClick={() => setShowAddModal(true)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '0.4rem',
+            padding: '0.45rem 1rem',
+            background: 'var(--surface)',
+            border: '1px dashed var(--border)',
+            borderRadius: 8,
+            fontWeight: 600, fontSize: '0.8rem',
+            color: 'var(--primary)',
+            cursor: 'pointer',
+            transition: 'all 0.15s'
+          }}
+          onMouseOver={e => { (e.currentTarget as HTMLElement).style.background = 'var(--primary-light)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--primary)'; }}
+          onMouseOut={e => { (e.currentTarget as HTMLElement).style.background = 'var(--surface)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; }}
+        >
+          <Plus size={14} /> Add Chart
+        </button>
       </div>
 
       {/* KPIs */}
@@ -311,24 +301,23 @@ const SheetSection = ({ sheet }: { sheet: SheetAnalysis }) => {
       )}
 
       {/* Charts grid */}
-      {sheetCharts.length > 0 && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
-          gap: '1.25rem'
-        }}>
-          {sheetCharts.map((config, i) => (
-            <PieChartCard
-              key={config.id}
-              id={config.id}
-              title={config.title}
-              data={getChartData(config)}
-              onRemove={() => removeChart(config.id)}
-              index={i}
-            />
-          ))}
-        </div>
-      )}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
+        gap: '1.25rem'
+      }}>
+        {sheetCharts.map((config, i) => (
+          <PieChartCard
+            key={config.id}
+            title={config.title}
+            data={getChartData(config)}
+            onRemove={() => removeChart(config.id)}
+            index={i}
+          />
+        ))}
+      </div>
+
+      {showAddModal && <AddChartModal sheet={sheet} onClose={() => setShowAddModal(false)} />}
     </section>
   );
 };
@@ -336,100 +325,15 @@ const SheetSection = ({ sheet }: { sheet: SheetAnalysis }) => {
 // ─── Main Charts / Dashboard View ────────────────────────────────────────────
 
 export const DashboardView = () => {
-  const { sheets } = useDashboard();
-  const [showAddModal, setShowAddModal] = useState(false);
+  const { sheets, activeSheet } = useDashboard();
+  
+  const currentSheet = sheets.find(s => s.name === activeSheet);
+
+  if (!currentSheet) return null;
 
   return (
-    <>
-      <main style={{ padding: '1.5rem 2rem', maxWidth: 1600, margin: '0 auto' }}>
-        {/* Add chart button */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1.5rem' }}>
-          <button
-            onClick={() => setShowAddModal(true)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '0.4rem',
-              padding: '0.5rem 1.1rem',
-              background: 'var(--surface)',
-              border: '1px dashed var(--border)',
-              borderRadius: 8,
-              fontWeight: 600, fontSize: '0.8rem',
-              color: 'var(--primary)',
-              cursor: 'pointer',
-              transition: 'all 0.15s'
-            }}
-            onMouseOver={e => { (e.currentTarget as HTMLElement).style.background = 'var(--primary-light)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--primary)'; }}
-            onMouseOut={e => { (e.currentTarget as HTMLElement).style.background = 'var(--surface)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; }}
-          >
-            <Plus size={14} /> Add Chart
-          </button>
-        </div>
-
-        {sheets.map(sheet => (
-          <React.Fragment key={sheet.name}>
-            <FiltersBarForSheet sheetName={sheet.name} />
-            <SheetSection sheet={sheet} />
-          </React.Fragment>
-        ))}
-      </main>
-      {showAddModal && <AddChartModal onClose={() => setShowAddModal(false)} />}
-    </>
-  );
-};
-
-// Inline helper to avoid import cycle
-const FiltersBarForSheet = ({ sheetName }: { sheetName: string }) => {
-  const { sheets, globalFilters, toggleFilter, resetFilters } = useDashboard();
-  const sheet = sheets.find(s => s.name === sheetName);
-  if (!sheet) return null;
-
-  const filterableCols = [...sheet.categoricalCols, ...sheet.dateCols].filter(col => {
-    const unique = new Set(sheet.records.map(r => String(r[col] ?? ''))).size;
-    return unique >= 2 && unique <= 20;
-  });
-  if (filterableCols.length === 0) return null;
-
-  const sheetFilters = globalFilters[sheetName] || {};
-  const hasActive = Object.values(sheetFilters).some(v => v.length > 0);
-
-  return (
-    <div style={{
-      display: 'flex', flexWrap: 'wrap', gap: '0.4rem',
-      alignItems: 'center', marginBottom: '1rem',
-      padding: '0.6rem 0.75rem',
-      background: 'var(--surface)',
-      border: '1px solid var(--border)',
-      borderRadius: 'var(--radius-sm)'
-    }}>
-      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--foreground-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: 4 }}>
-        Filters:
-      </span>
-      {filterableCols.map((col, i) => {
-        const unique = Array.from(new Set(sheet.records.map(r => String(r[col] ?? '')))).filter(Boolean).sort();
-        const activeVals = sheetFilters[col] || [];
-        return (
-          <React.Fragment key={col}>
-            {i > 0 && <div style={{ width: 1, height: 18, background: 'var(--border)' }} />}
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--foreground-muted)', textTransform: 'uppercase' }}>{col}:</span>
-            {unique.map(val => (
-              <button key={val} onClick={() => toggleFilter(sheetName, col, val)} style={{
-                padding: '0.15rem 0.55rem', borderRadius: 999, fontSize: '0.72rem',
-                fontWeight: activeVals.includes(val) ? 700 : 500,
-                background: activeVals.includes(val) ? 'var(--primary)' : 'transparent',
-                color: activeVals.includes(val) ? 'white' : 'var(--foreground)',
-                border: `1px solid ${activeVals.includes(val) ? 'var(--primary)' : 'var(--border)'}`,
-                cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.12s'
-              }}>{val}</button>
-            ))}
-          </React.Fragment>
-        );
-      })}
-      {hasActive && (
-        <button onClick={resetFilters} style={{
-          padding: '0.15rem 0.55rem', borderRadius: 999, fontSize: '0.72rem',
-          fontWeight: 600, background: '#fee2e2', color: '#dc2626',
-          border: '1px solid #fca5a5', cursor: 'pointer'
-        }}>✕ Reset</button>
-      )}
-    </div>
+    <main style={{ padding: '1.5rem 2rem', maxWidth: 1600, margin: '0 auto', width: '100%' }}>
+      <SheetSection sheet={currentSheet} />
+    </main>
   );
 };

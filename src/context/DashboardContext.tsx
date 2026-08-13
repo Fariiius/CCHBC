@@ -31,6 +31,8 @@ interface DashboardContextProps {
   loading: boolean;
   error: string | null;
   fileName: string;
+  activeSheet: string | null;
+  setActiveSheet: (name: string) => void;
   globalFilters: Record<string, Record<string, string[]>>;
   toggleFilter: (sheet: string, col: string, val: string) => void;
   resetFilters: () => void;
@@ -68,7 +70,6 @@ const parseNumber = (v: any): number | null => {
   return null;
 };
 
-// Ignore columns that are likely IDs or Years
 const isIgnoredNumericCol = (colName: string, values: number[]): boolean => {
   const lower = colName.toLowerCase();
   if (lower.includes('id') || lower.includes('code') || lower.includes('index') || lower.includes('#')) {
@@ -76,7 +77,6 @@ const isIgnoredNumericCol = (colName: string, values: number[]): boolean => {
   }
   if (lower.includes('year')) return true;
 
-  // Check if values look like years (e.g. 1990 - 2100)
   const allYears = values.every(v => Number.isInteger(v) && v >= 1900 && v <= 2100);
   if (allYears) return true;
 
@@ -88,7 +88,6 @@ const analyzeSheet = (name: string, rawArray: any[][]): SheetAnalysis => {
     return { name, records: [], numericCols: [], categoricalCols: [], dateCols: [], allCols: [], kpis: [], topGroups: [], rowCount: 0, isEmpty: true };
   }
 
-  // 1. Find the header row by looking for the row with the most string values
   let headerRowIdx = 0;
   let maxStrings = 0;
 
@@ -108,13 +107,11 @@ const analyzeSheet = (name: string, rawArray: any[][]): SheetAnalysis => {
 
   const headers = rawArray[headerRowIdx].map((h, i) => h ? String(h).trim() : `Column_${i}`);
   
-  // 2. Build records
   const records: DataRecord[] = [];
   for (let i = headerRowIdx + 1; i < rawArray.length; i++) {
     const row = rawArray[i];
     if (!row || row.length === 0) continue;
     
-    // Check if row is mostly empty
     const nonEmptyCount = row.filter(val => val !== null && val !== undefined && val !== '').length;
     if (nonEmptyCount < Math.max(2, headers.length * 0.3)) continue;
 
@@ -153,13 +150,11 @@ const analyzeSheet = (name: string, rawArray: any[][]): SheetAnalysis => {
     else categoricalCols.push(col);
   });
 
-  // Filter numeric columns to remove IDs/Years
   const numericCols = rawNumericCols.filter(col => {
     const vals = sample.map(r => parseNumber(r[col])).filter(n => n !== null) as number[];
     return !isIgnoredNumericCol(col, vals);
   });
 
-  // 3. Build KPIs (Limit to top 4 metrics based on total absolute sum)
   const allKpiCandidates = numericCols.map(col => {
     const total = records.reduce((s, r) => s + (parseNumber(r[col]) ?? 0), 0);
     return { label: col, value: total, col, absSum: Math.abs(total) };
@@ -168,14 +163,13 @@ const analyzeSheet = (name: string, rawArray: any[][]): SheetAnalysis => {
   allKpiCandidates.sort((a, b) => b.absSum - a.absSum);
   const kpis = allKpiCandidates.slice(0, 4).map(k => ({ label: k.label, value: k.value, col: k.col }));
 
-  // 4. Build top groups: Pick the top 2 numeric columns and top categorical columns
   const topGroups: SheetAnalysis['topGroups'] = [];
   const topNumCols = kpis.slice(0, 2).map(k => k.col);
   
   if (topNumCols.length > 0) {
     const usefulCatCols = [...categoricalCols, ...dateCols].filter(col => {
       const unique = new Set(records.map(r => String(r[col] ?? ''))).size;
-      return unique >= 2 && unique <= 30; // Not too many slices
+      return unique >= 2 && unique <= 30;
     });
 
     topNumCols.forEach(numCol => {
@@ -190,11 +184,7 @@ const analyzeSheet = (name: string, rawArray: any[][]): SheetAnalysis => {
 
         const total = Array.from(map.values()).reduce((a, b) => a + Math.abs(b), 0);
         const data = Array.from(map.entries())
-          .map(([name, value]) => ({
-            name,
-            value,
-            pct: total > 0 ? Math.abs(value / total) * 100 : 0
-          }))
+          .map(([name, value]) => ({ name, value, pct: total > 0 ? Math.abs(value / total) * 100 : 0 }))
           .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
           .slice(0, 15);
 
@@ -205,19 +195,15 @@ const analyzeSheet = (name: string, rawArray: any[][]): SheetAnalysis => {
     });
   }
 
-  return {
-    name, records, numericCols, categoricalCols, dateCols, allCols,
-    kpis, topGroups, rowCount: records.length, isEmpty: false
-  };
+  return { name, records, numericCols, categoricalCols, dateCols, allCols, kpis, topGroups, rowCount: records.length, isEmpty: false };
 };
-
-// ─── Provider ───────────────────────────────────────────────────────────────
 
 export const DashboardProvider = ({ children }: { children: ReactNode }) => {
   const [sheets, setSheets] = useState<SheetAnalysis[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState('');
+  const [activeSheet, setActiveSheet] = useState<string | null>(null);
   const [globalFilters, setGlobalFilters] = useState<Record<string, Record<string, string[]>>>({});
   const [chartConfigs, setChartConfigs] = useState<ChartConfig[]>([]);
 
@@ -230,17 +216,14 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
 
       const analyzed: SheetAnalysis[] = wb.SheetNames.map(name => {
         const ws = wb.Sheets[name];
-        // Parse as array of arrays to intelligently find the header row
         const rawArray = xlsx.utils.sheet_to_json(ws, { header: 1 }) as any[][];
         return analyzeSheet(name, rawArray);
       }).filter(s => !s.isEmpty);
 
       if (analyzed.length === 0) throw new Error('No readable data found in this file. Please ensure the file has data.');
 
-      // Auto-generate chart configs from top groups
       const autoCharts: ChartConfig[] = [];
       analyzed.forEach(sheet => {
-        // Limit to 4 charts per sheet automatically to avoid clutter
         sheet.topGroups.slice(0, 4).forEach((group, i) => {
           autoCharts.push({
             id: `auto-${sheet.name}-${i}`,
@@ -255,12 +238,10 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
       setSheets(analyzed);
       setChartConfigs(autoCharts);
       setFileName(file.name);
+      setActiveSheet(analyzed[0].name);
 
-      // Init filters
       const initFilters: Record<string, Record<string, string[]>> = {};
-      analyzed.forEach(sheet => {
-        initFilters[sheet.name] = {};
-      });
+      analyzed.forEach(sheet => { initFilters[sheet.name] = {}; });
       setGlobalFilters(initFilters);
 
     } catch (err: any) {
@@ -289,17 +270,14 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     setSheets([]);
     setChartConfigs([]);
     setFileName('');
+    setActiveSheet(null);
     setGlobalFilters({});
     setError(null);
   };
 
   const addChart = (sheetName: string, categoryCol: string, valueCol: string) => {
     setChartConfigs(prev => [...prev, {
-      id: `user-${Date.now()}`,
-      sheetName,
-      categoryCol,
-      valueCol,
-      title: `${valueCol} by ${categoryCol}`
+      id: `user-${Date.now()}`, sheetName, categoryCol, valueCol, title: `${valueCol} by ${categoryCol}`
     }]);
   };
 
@@ -322,7 +300,7 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <DashboardContext.Provider value={{
-      sheets, loading, error, fileName, globalFilters,
+      sheets, loading, error, fileName, activeSheet, setActiveSheet, globalFilters,
       toggleFilter, resetFilters, handleFileUpload, resetDashboard,
       chartConfigs, addChart, removeChart, getFilteredRecords
     }}>

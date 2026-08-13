@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useDashboard } from '@/context/DashboardContext';
-import { Header } from '@/components/Header/Header';
+import { Header, FiltersBar } from '@/components/Header/Header';
 import { DashboardView } from '@/components/Dashboard/Charts';
 import { UploadZone } from '@/components/Upload/UploadZone';
 import { Loader2 } from 'lucide-react';
@@ -71,6 +71,7 @@ export const Dashboard = () => {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--background)' }}>
       <Header />
+      <FiltersBar />
       <DashboardView />
     </div>
   );
