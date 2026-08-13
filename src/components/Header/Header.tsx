@@ -5,7 +5,7 @@ import { UploadCloud, FileSpreadsheet } from 'lucide-react';
 import { useDashboard } from '@/context/DashboardContext';
 
 export const Header = () => {
-  const { fileName, resetDashboard, sheets, activeSheet, setActiveSheet } = useDashboard();
+  const { fileName, resetDashboard, sheets } = useDashboard();
   const totalRows = sheets.reduce((s, sh) => s + sh.rowCount, 0);
 
   return (
@@ -18,29 +18,16 @@ export const Header = () => {
       alignItems: 'center',
       justifyContent: 'space-between',
       flexShrink: 0,
-      zIndex: 100,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <FileSpreadsheet size={16} color="var(--primary)" />
-          <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--foreground)' }}>
-            Dashboard
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+        <FileSpreadsheet size={16} color="var(--primary)" />
+        <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--foreground)' }}>
+          Summary Dashboard
+        </span>
+        {fileName && (
+          <span style={{ fontSize: '0.65rem', color: 'var(--foreground-muted)', marginLeft: 4 }}>
+            {fileName} · {totalRows.toLocaleString()} rows · {sheets.length} table{sheets.length !== 1 ? 's' : ''} detected
           </span>
-          {fileName && (
-            <span style={{ fontSize: '0.65rem', color: 'var(--foreground-muted)', marginLeft: 4 }}>
-              {fileName} · {totalRows.toLocaleString()} rows · {sheets.length} tables
-            </span>
-          )}
-        </div>
-
-        {sheets.length > 0 && (
-          <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-            <div style={{ width: 1, height: 20, background: 'var(--border)', marginRight: 8 }} />
-            <TabBtn active={activeSheet === 'Master Summary'} onClick={() => setActiveSheet('Master Summary')} label="★ Summary" highlight />
-            {sheets.map(s => (
-              <TabBtn key={s.name} active={activeSheet === s.name} onClick={() => setActiveSheet(s.name)} label={s.name} />
-            ))}
-          </div>
         )}
       </div>
 
@@ -59,15 +46,3 @@ export const Header = () => {
     </header>
   );
 };
-
-const TabBtn = ({ active, onClick, label, highlight }: { active: boolean; onClick: () => void; label: string; highlight?: boolean }) => (
-  <button onClick={onClick} style={{
-    padding: '0.25rem 0.7rem', fontSize: '0.72rem', borderRadius: 6,
-    fontWeight: active ? 700 : 500,
-    color: active ? (highlight ? 'white' : 'var(--primary)') : 'var(--foreground-muted)',
-    background: active ? (highlight ? 'var(--primary)' : 'var(--primary-light)') : 'transparent',
-    transition: 'all 0.12s',
-  }}>
-    {label}
-  </button>
-);

@@ -18,12 +18,11 @@ const fmt = (v: number): string => {
 // ── Filter Pills Bar (Power BI style) ───────────────────────────────────────
 
 export const FilterBar = () => {
-  const { sheets, masterFilters, toggleFilter, resetFilters, activeSheet } = useDashboard();
+  const { sheets, masterFilters, toggleFilter, resetFilters } = useDashboard();
 
   const filterableCols = useMemo(() => {
     const map = new Map<string, Set<string>>();
-    const src = activeSheet === 'Master Summary' ? sheets : sheets.filter(s => s.name === activeSheet);
-    src.forEach(sheet => {
+    sheets.forEach(sheet => {
       [...sheet.categoricalCols, ...sheet.dateCols].forEach(col => {
         const vals = new Set(sheet.records.map(r => String(r[col] ?? '')).filter(v => v && v !== 'undefined' && v !== 'null'));
         if (vals.size >= 2 && vals.size <= 20) {
@@ -36,7 +35,7 @@ export const FilterBar = () => {
       .filter(([_, s]) => s.size >= 2 && s.size <= 20)
       .map(([col, s]) => ({ col, values: Array.from(s).sort() }))
       .slice(0, 5);
-  }, [sheets, activeSheet]);
+  }, [sheets]);
 
   if (filterableCols.length === 0) return null;
 
@@ -205,18 +204,16 @@ const AddChartModal = ({ onClose }: { onClose: () => void }) => {
   );
 };
 
-// ── Main Dashboard View ─────────────────────────────────────────────────────
+// ── Main Dashboard View (Summary Only) ──────────────────────────────────────
 
 export const DashboardView = () => {
-  const { sheets, activeSheet, kpiConfigs, removeKpi, chartConfigs, removeChart, getFilteredRecords } = useDashboard();
+  const { sheets, kpiConfigs, removeKpi, chartConfigs, removeChart, getFilteredRecords } = useDashboard();
   const [showKpiModal, setShowKpiModal] = useState(false);
   const [showChartModal, setShowChartModal] = useState(false);
 
-  const targetSheets = activeSheet === 'Master Summary' ? sheets : sheets.filter(s => s.name === activeSheet);
-
-  // Collect all KPIs across target sheets
+  // Collect all KPIs across all sheets
   const allKpis = useMemo(() => {
-    return targetSheets.flatMap(sheet => {
+    return sheets.flatMap(sheet => {
       const filtered = getFilteredRecords(sheet.name);
       return kpiConfigs.filter(k => k.sheetName === sheet.name).map(k => {
         const total = filtered.reduce((s, r) => {
@@ -225,11 +222,11 @@ export const DashboardView = () => {
         return { id: k.id, label: k.col, value: total };
       });
     });
-  }, [targetSheets, kpiConfigs, getFilteredRecords]);
+  }, [sheets, kpiConfigs, getFilteredRecords]);
 
-  // Collect all charts across target sheets
+  // Collect all charts across all sheets
   const allCharts = useMemo(() => {
-    return targetSheets.flatMap(sheet => {
+    return sheets.flatMap(sheet => {
       const filtered = getFilteredRecords(sheet.name);
       return chartConfigs.filter(c => c.sheetName === sheet.name).map(c => {
         const map = new Map<string, number>();
@@ -243,9 +240,8 @@ export const DashboardView = () => {
         return { id: c.id, title: c.title, data };
       });
     });
-  }, [targetSheets, chartConfigs, getFilteredRecords]);
+  }, [sheets, chartConfigs, getFilteredRecords]);
 
-  // Determine chart grid layout: split into rows like Power BI
   // Row 1: small charts (up to 2), Row 2: large charts (up to 3)
   const smallCharts = allCharts.slice(0, 2);
   const largeCharts = allCharts.slice(2);

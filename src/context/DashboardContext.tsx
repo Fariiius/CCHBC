@@ -37,9 +37,6 @@ interface DashboardContextProps {
   loading: boolean;
   error: string | null;
   fileName: string;
-  activeSheet: string | null;
-  setActiveSheet: (name: string) => void;
-  // Master Filters: Column Name -> Selected Values (applies to ALL tables with this column)
   masterFilters: Record<string, string[]>;
   toggleFilter: (col: string, val: string) => void;
   resetFilters: () => void;
@@ -284,7 +281,6 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState('');
-  const [activeSheet, setActiveSheet] = useState<string | null>(null);
   const [masterFilters, setMasterFilters] = useState<Record<string, string[]>>({});
   const [chartConfigs, setChartConfigs] = useState<ChartConfig[]>([]);
   const [kpiConfigs, setKpiConfigs] = useState<KpiConfig[]>([]);
@@ -339,7 +335,6 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
       setChartConfigs(autoCharts);
       setKpiConfigs(autoKpis);
       setFileName(file.name);
-      setActiveSheet('Master Summary');
       setMasterFilters({});
 
     } catch (err: any) {
@@ -366,7 +361,6 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     setChartConfigs([]);
     setKpiConfigs([]);
     setFileName('');
-    setActiveSheet(null);
     setMasterFilters({});
     setError(null);
   };
@@ -407,7 +401,7 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <DashboardContext.Provider value={{
-      sheets, loading, error, fileName, activeSheet, setActiveSheet, masterFilters,
+      sheets, loading, error, fileName, masterFilters,
       toggleFilter, resetFilters, handleFileUpload, resetDashboard,
       chartConfigs, addChart, removeChart,
       kpiConfigs, addKpi, removeKpi,
