@@ -26,6 +26,12 @@ export interface ChartConfig {
   title: string;
 }
 
+export interface KpiConfig {
+  id: string;
+  sheetName: string;
+  col: string;
+}
+
 interface DashboardContextProps {
   sheets: SheetAnalysis[];
   loading: boolean;
@@ -41,6 +47,9 @@ interface DashboardContextProps {
   chartConfigs: ChartConfig[];
   addChart: (sheetName: string, categoryCol: string, valueCol: string) => void;
   removeChart: (id: string) => void;
+  kpiConfigs: KpiConfig[];
+  addKpi: (sheetName: string, col: string) => void;
+  removeKpi: (id: string) => void;
   getFilteredRecords: (sheetName: string) => DataRecord[];
 }
 
@@ -206,6 +215,7 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
   const [activeSheet, setActiveSheet] = useState<string | null>(null);
   const [globalFilters, setGlobalFilters] = useState<Record<string, Record<string, string[]>>>({});
   const [chartConfigs, setChartConfigs] = useState<ChartConfig[]>([]);
+  const [kpiConfigs, setKpiConfigs] = useState<KpiConfig[]>([]);
 
   const handleFileUpload = async (file: File) => {
     setLoading(true);
@@ -223,6 +233,7 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
       if (analyzed.length === 0) throw new Error('No readable data found in this file. Please ensure the file has data.');
 
       const autoCharts: ChartConfig[] = [];
+      const autoKpis: KpiConfig[] = [];
       analyzed.forEach(sheet => {
         sheet.topGroups.slice(0, 4).forEach((group, i) => {
           autoCharts.push({
@@ -233,10 +244,18 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
             title: `${group.valueCol} by ${group.col}`
           });
         });
+        sheet.kpis.forEach((kpi, i) => {
+          autoKpis.push({
+            id: `auto-kpi-${sheet.name}-${i}`,
+            sheetName: sheet.name,
+            col: kpi.col
+          });
+        });
       });
 
       setSheets(analyzed);
       setChartConfigs(autoCharts);
+      setKpiConfigs(autoKpis);
       setFileName(file.name);
       setActiveSheet(analyzed[0].name);
 
@@ -269,6 +288,7 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
   const resetDashboard = () => {
     setSheets([]);
     setChartConfigs([]);
+    setKpiConfigs([]);
     setFileName('');
     setActiveSheet(null);
     setGlobalFilters({});
@@ -277,12 +297,22 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
 
   const addChart = (sheetName: string, categoryCol: string, valueCol: string) => {
     setChartConfigs(prev => [...prev, {
-      id: `user-${Date.now()}`, sheetName, categoryCol, valueCol, title: `${valueCol} by ${categoryCol}`
+      id: `user-chart-${Date.now()}`, sheetName, categoryCol, valueCol, title: `${valueCol} by ${categoryCol}`
     }]);
   };
 
   const removeChart = (id: string) => {
     setChartConfigs(prev => prev.filter(c => c.id !== id));
+  };
+
+  const addKpi = (sheetName: string, col: string) => {
+    setKpiConfigs(prev => [...prev, {
+      id: `user-kpi-${Date.now()}`, sheetName, col
+    }]);
+  };
+
+  const removeKpi = (id: string) => {
+    setKpiConfigs(prev => prev.filter(k => k.id !== id));
   };
 
   const getFilteredRecords = (sheetName: string): DataRecord[] => {
@@ -302,7 +332,9 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     <DashboardContext.Provider value={{
       sheets, loading, error, fileName, activeSheet, setActiveSheet, globalFilters,
       toggleFilter, resetFilters, handleFileUpload, resetDashboard,
-      chartConfigs, addChart, removeChart, getFilteredRecords
+      chartConfigs, addChart, removeChart,
+      kpiConfigs, addKpi, removeKpi,
+      getFilteredRecords
     }}>
       {children}
     </DashboardContext.Provider>

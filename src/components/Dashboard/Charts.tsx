@@ -22,30 +22,53 @@ const formatNumber = (v: number): string => {
 
 // ─── KPI Cards ───────────────────────────────────────────────────────────────
 
-const KPICard = ({ label, value, index }: { label: string; value: number; index: number }) => {
+const KPICard = ({ label, value, index, onRemove }: { label: string; value: number; index: number; onRemove: () => void }) => {
   const colors = ['#1a73e8', '#34a853', '#9c27b0', '#ea4335', '#ff9800', '#00bcd4'];
   const color = colors[index % colors.length];
   const isNeg = value < 0;
+  const [hovered, setHovered] = useState(false);
 
   return (
     <div
       className="animate-in"
       style={{ animationDelay: `${index * 60}ms` }}
+      onMouseOver={() => setHovered(true)}
+      onMouseOut={() => setHovered(false)}
     >
       <div style={{
         background: 'var(--surface)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius)',
         padding: '1.25rem 1.5rem',
-        boxShadow: 'var(--shadow-sm)',
+        boxShadow: hovered ? 'var(--shadow-md)' : 'var(--shadow-sm)',
         borderTop: `3px solid ${color}`,
         transition: 'box-shadow 0.2s, transform 0.2s',
-        cursor: 'default'
-      }}
-        onMouseOver={e => { (e.currentTarget as HTMLElement).style.boxShadow = 'var(--shadow-md)'; (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)'; }}
-        onMouseOut={e => { (e.currentTarget as HTMLElement).style.boxShadow = 'var(--shadow-sm)'; (e.currentTarget as HTMLElement).style.transform = 'translateY(0)'; }}
-      >
-        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--foreground-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
+        transform: hovered ? 'translateY(-2px)' : 'translateY(0)',
+        cursor: 'default',
+        position: 'relative'
+      }}>
+        <button
+          onClick={onRemove}
+          style={{
+            position: 'absolute',
+            top: '0.75rem',
+            right: '0.75rem',
+            opacity: hovered ? 1 : 0,
+            transition: 'opacity 0.15s',
+            padding: '0.2rem',
+            borderRadius: 6,
+            color: 'var(--foreground-muted)',
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer'
+          }}
+          onMouseOver={e => (e.currentTarget.style.background = '#fee2e2', e.currentTarget.style.color = '#dc2626')}
+          onMouseOut={e => (e.currentTarget.style.background = 'transparent', e.currentTarget.style.color = 'var(--foreground-muted)')}
+        >
+          <X size={14} />
+        </button>
+
+        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--foreground-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem', paddingRight: '1rem' }}>
           Sum of {label}
         </div>
         <div style={{ fontSize: '1.75rem', fontWeight: 800, color: isNeg ? '#dc2626' : 'var(--foreground)', letterSpacing: '-0.02em', lineHeight: 1 }}>
@@ -148,7 +171,9 @@ const PieChartCard = ({
               padding: '0.2rem',
               borderRadius: 6,
               color: 'var(--foreground-muted)',
-              background: 'transparent'
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer'
             }}
             onMouseOver={e => (e.currentTarget.style.background = '#fee2e2', e.currentTarget.style.color = '#dc2626')}
             onMouseOut={e => (e.currentTarget.style.background = 'transparent', e.currentTarget.style.color = 'var(--foreground-muted)')}
@@ -162,7 +187,7 @@ const PieChartCard = ({
   );
 };
 
-// ─── Add Chart Modal ─────────────────────────────────────────────────────────
+// ─── Add Modals ─────────────────────────────────────────────────────────
 
 const AddChartModal = ({ sheet, onClose }: { sheet: SheetAnalysis, onClose: () => void }) => {
   const { addChart } = useDashboard();
@@ -205,7 +230,7 @@ const AddChartModal = ({ sheet, onClose }: { sheet: SheetAnalysis, onClose: () =
         </div>
 
         <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <button onClick={onClose} style={{ flex: 1, padding: '0.7rem', borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)', fontWeight: 600, fontSize: '0.875rem', color: 'var(--foreground)' }}>
+          <button onClick={onClose} style={{ flex: 1, padding: '0.7rem', borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)', fontWeight: 600, fontSize: '0.875rem', color: 'var(--foreground)', cursor: 'pointer', borderStyle: 'solid' }}>
             Cancel
           </button>
           <button
@@ -213,7 +238,7 @@ const AddChartModal = ({ sheet, onClose }: { sheet: SheetAnalysis, onClose: () =
             onClick={() => { addChart(sheet.name, catCol, valCol); onClose(); }}
             style={{
               flex: 1, padding: '0.7rem', borderRadius: 8, background: !catCol || !valCol ? '#e2e8f0' : 'var(--primary)',
-              color: !catCol || !valCol ? 'var(--foreground-muted)' : 'white',
+              color: !catCol || !valCol ? 'var(--foreground-muted)' : 'white', border: 'none',
               fontWeight: 600, fontSize: '0.875rem', cursor: !catCol || !valCol ? 'not-allowed' : 'pointer'
             }}
           >
@@ -225,24 +250,78 @@ const AddChartModal = ({ sheet, onClose }: { sheet: SheetAnalysis, onClose: () =
   );
 };
 
+const AddKpiModal = ({ sheet, onClose }: { sheet: SheetAnalysis, onClose: () => void }) => {
+  const { addKpi } = useDashboard();
+  const [valCol, setValCol] = useState('');
+
+  const selectStyle: React.CSSProperties = {
+    width: '100%', padding: '0.65rem 0.75rem',
+    background: 'var(--surface-2)', border: '1px solid var(--border)',
+    borderRadius: 8, color: 'var(--foreground)', fontSize: '0.875rem', outline: 'none'
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: 'var(--surface)', borderRadius: 'var(--radius)', padding: '2rem',
+        width: 400, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.15)'
+      }}>
+        <div style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--foreground)', marginBottom: '1.5rem' }}>
+          Add KPI Card
+        </div>
+
+        <div style={{ marginBottom: '1.5rem' }}>
+          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--foreground-muted)', marginBottom: '0.4rem' }}>Value to Sum</label>
+          <select value={valCol} onChange={e => setValCol(e.target.value)} style={selectStyle}>
+            <option value="">Select numeric column...</option>
+            {sheet.numericCols.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <button onClick={onClose} style={{ flex: 1, padding: '0.7rem', borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)', fontWeight: 600, fontSize: '0.875rem', color: 'var(--foreground)', cursor: 'pointer', borderStyle: 'solid' }}>
+            Cancel
+          </button>
+          <button
+            disabled={!valCol}
+            onClick={() => { addKpi(sheet.name, valCol); onClose(); }}
+            style={{
+              flex: 1, padding: '0.7rem', borderRadius: 8, background: !valCol ? '#e2e8f0' : 'var(--primary)',
+              color: !valCol ? 'var(--foreground-muted)' : 'white', border: 'none',
+              fontWeight: 600, fontSize: '0.875rem', cursor: !valCol ? 'not-allowed' : 'pointer'
+            }}
+          >
+            Add KPI
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── Sheet Section ────────────────────────────────────────────────────────────
 
 const SheetSection = ({ sheet }: { sheet: SheetAnalysis }) => {
-  const { chartConfigs, removeChart, getFilteredRecords } = useDashboard();
+  const { chartConfigs, removeChart, kpiConfigs, removeKpi, getFilteredRecords } = useDashboard();
   const filteredRecords = getFilteredRecords(sheet.name);
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [showAddChart, setShowAddChart] = useState(false);
+  const [showAddKpi, setShowAddKpi] = useState(false);
 
   // Recalculate KPIs with filtered data
+  const sheetKpis = kpiConfigs.filter(k => k.sheetName === sheet.name);
   const filteredKPIs = useMemo(() => {
-    return sheet.kpis.map(kpi => {
+    return sheetKpis.map(kpi => {
       const total = filteredRecords.reduce((s, r) => {
         const v = r[kpi.col];
         const n = typeof v === 'number' ? v : Number(String(v).replace(/[,$%€£\s]/g, ''));
         return s + (isFinite(n) ? n : 0);
       }, 0);
-      return { label: kpi.col, value: total, col: kpi.col };
+      return { id: kpi.id, label: kpi.col, value: total };
     });
-  }, [filteredRecords, sheet.kpis]);
+  }, [filteredRecords, sheetKpis]);
 
   // Recalculate chart data with filtered records
   const sheetCharts = chartConfigs.filter(c => c.sheetName === sheet.name);
@@ -263,22 +342,27 @@ const SheetSection = ({ sheet }: { sheet: SheetAnalysis }) => {
       .slice(0, 15);
   };
 
+  const btnStyle = {
+    display: 'flex', alignItems: 'center', gap: '0.4rem',
+    padding: '0.45rem 1rem', background: 'var(--surface)', border: '1px dashed var(--border)',
+    borderRadius: 8, fontWeight: 600 as const, fontSize: '0.8rem', color: 'var(--primary)',
+    cursor: 'pointer', transition: 'all 0.15s'
+  };
+
   return (
     <section>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1.25rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginBottom: '1.25rem' }}>
         <button
-          onClick={() => setShowAddModal(true)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '0.4rem',
-            padding: '0.45rem 1rem',
-            background: 'var(--surface)',
-            border: '1px dashed var(--border)',
-            borderRadius: 8,
-            fontWeight: 600, fontSize: '0.8rem',
-            color: 'var(--primary)',
-            cursor: 'pointer',
-            transition: 'all 0.15s'
-          }}
+          onClick={() => setShowAddKpi(true)}
+          style={btnStyle}
+          onMouseOver={e => { (e.currentTarget as HTMLElement).style.background = 'var(--primary-light)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--primary)'; }}
+          onMouseOut={e => { (e.currentTarget as HTMLElement).style.background = 'var(--surface)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; }}
+        >
+          <Plus size={14} /> Add KPI
+        </button>
+        <button
+          onClick={() => setShowAddChart(true)}
+          style={btnStyle}
           onMouseOver={e => { (e.currentTarget as HTMLElement).style.background = 'var(--primary-light)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--primary)'; }}
           onMouseOut={e => { (e.currentTarget as HTMLElement).style.background = 'var(--surface)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; }}
         >
@@ -295,29 +379,32 @@ const SheetSection = ({ sheet }: { sheet: SheetAnalysis }) => {
           marginBottom: '1.5rem'
         }}>
           {filteredKPIs.map((kpi, i) => (
-            <KPICard key={kpi.col} label={kpi.label} value={kpi.value} index={i} />
+            <KPICard key={kpi.id} label={kpi.label} value={kpi.value} index={i} onRemove={() => removeKpi(kpi.id)} />
           ))}
         </div>
       )}
 
       {/* Charts grid */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
-        gap: '1.25rem'
-      }}>
-        {sheetCharts.map((config, i) => (
-          <PieChartCard
-            key={config.id}
-            title={config.title}
-            data={getChartData(config)}
-            onRemove={() => removeChart(config.id)}
-            index={i}
-          />
-        ))}
-      </div>
+      {sheetCharts.length > 0 && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
+          gap: '1.25rem'
+        }}>
+          {sheetCharts.map((config, i) => (
+            <PieChartCard
+              key={config.id}
+              title={config.title}
+              data={getChartData(config)}
+              onRemove={() => removeChart(config.id)}
+              index={i}
+            />
+          ))}
+        </div>
+      )}
 
-      {showAddModal && <AddChartModal sheet={sheet} onClose={() => setShowAddModal(false)} />}
+      {showAddChart && <AddChartModal sheet={sheet} onClose={() => setShowAddChart(false)} />}
+      {showAddKpi && <AddKpiModal sheet={sheet} onClose={() => setShowAddKpi(false)} />}
     </section>
   );
 };
