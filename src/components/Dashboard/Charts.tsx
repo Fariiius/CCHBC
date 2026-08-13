@@ -101,12 +101,14 @@ const KPICard = ({ label, value, onRemove, isPercent = false }: { label: string;
 
 // ── Charts ──────────────────────────────────────────────────────────────────
 
-const GenericChart = ({ title, data, type, onRemove, size }: {
-  title: string; data: { name: string; value: number }[]; type: 'pie' | 'bar' | 'line'; onRemove: () => void; size: 'sm' | 'lg';
+const GenericChart = ({ title, data, globalTotal, type, onRemove, size }: {
+  title: string; data: { name: string; value: number }[]; globalTotal: number; type: 'pie' | 'bar' | 'line'; onRemove: () => void; size: 'sm' | 'lg';
 }) => {
   const [h, setH] = useState(false);
   const chartData = data.map((d, i) => ({ name: d.name, value: Math.abs(d.value), itemStyle: { color: COLORS[i % COLORS.length] } }));
-  const total = chartData.reduce((s, d) => s + d.value, 0);
+  // Instead of summing up current filtered slices, we use the globalTotal passed in
+  // so that if a user filters to 1 slice, it still shows "14%" instead of recalculating to "100%"
+  const denominator = globalTotal > 0 ? globalTotal : 1;
 
   let option: any = {};
 
@@ -115,7 +117,10 @@ const GenericChart = ({ title, data, type, onRemove, size }: {
       tooltip: {
         trigger: 'item', backgroundColor: 'white', borderColor: '#e8eaed', borderWidth: 1,
         textStyle: { color: '#1a1d23', fontSize: 11 },
-        formatter: (p: any) => `<b>${p.name}</b><br/>${fmt(p.value)} (${p.percent}%)`
+        formatter: (p: any) => {
+          const pct = ((p.value / denominator) * 100).toFixed(0);
+          return `<b>${p.name}</b><br/>${fmt(p.value)} (${pct}%)`;
+        }
       },
       series: [{
         type: 'pie',
@@ -124,7 +129,10 @@ const GenericChart = ({ title, data, type, onRemove, size }: {
         itemStyle: { borderRadius: 2, borderWidth: 1.5, borderColor: '#fff' },
         label: {
           show: true, position: 'outside', fontSize: size === 'sm' ? 9 : 10, color: '#5f6368',
-          formatter: (p: any) => `${p.name.length > 12 ? p.name.slice(0, 12) + '…' : p.name} ${(total > 0 ? (p.value/total)*100 : 0).toFixed(0)}%`,
+          formatter: (p: any) => {
+            const pct = ((p.value / denominator) * 100).toFixed(0);
+            return `${p.name.length > 12 ? p.name.slice(0, 12) + '…' : p.name} ${pct}%`;
+          },
         },
         labelLine: { length: 8, length2: 6, lineStyle: { color: '#dadce0' } },
         data: chartData
@@ -268,18 +276,30 @@ export const DashboardView = () => {
   const allCharts = useMemo(() => {
     return sheets.flatMap(sheet => {
       const filtered = getFilteredRecords(sheet.name);
+      const unfiltered = sheet.records; // Need unfiltered for global denominator
+
       return chartConfigs.filter(c => c.sheetName === sheet.name).map(c => {
+        
+        // 1. Calculate global total before any filters are applied
+        let globalTotal = 0;
+        unfiltered.forEach(r => {
+          const key = String(r[c.categoryCol] ?? '').trim();
+          if (!key || key === 'undefined' || key.toLowerCase().includes('total')) return;
+          const v = r[c.valueCol]; const n = typeof v === 'number' ? v : Number(String(v).replace(/[,$%€£\s]/g, ''));
+          if (isFinite(n)) globalTotal += Math.abs(n);
+        });
+
+        // 2. Calculate the filtered data that will actually be drawn
         const map = new Map<string, number>();
         filtered.forEach(r => {
           const key = String(r[c.categoryCol] ?? '').trim();
-          // COMPLETELY IGNORE "Total" ROWS FROM CHARTS (User request)
           if (!key || key === 'undefined' || key.toLowerCase().includes('total')) return;
-          
           const v = r[c.valueCol]; const n = typeof v === 'number' ? v : Number(String(v).replace(/[,$%€£\s]/g, ''));
           map.set(key, (map.get(key) || 0) + (isFinite(n) ? n : 0));
         });
+
         const data = Array.from(map.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => Math.abs(b.value) - Math.abs(a.value)).slice(0, 12);
-        return { id: c.id, title: c.title, type: c.type, data };
+        return { id: c.id, title: c.title, type: c.type, data, globalTotal };
       });
     });
   }, [sheets, chartConfigs, getFilteredRecords]);
@@ -316,7 +336,7 @@ export const DashboardView = () => {
         <div style={{ display: 'flex', gap: '0.5rem', flex: 1, minHeight: 0 }}>
           {smallCharts.map(c => (
             <div key={c.id} style={{ flex: 1, minHeight: 0 }}>
-              <GenericChart title={c.title} data={c.data} type={c.type} onRemove={() => removeChart(c.id)} size="sm" />
+              <GenericChart title={c.title} data={c.data} globalTotal={c.globalTotal} type={c.type} onRemove={() => removeChart(c.id)} size="sm" />
             </div>
           ))}
         </div>
@@ -327,7 +347,7 @@ export const DashboardView = () => {
         <div style={{ display: 'flex', gap: '0.5rem', flex: 1.2, minHeight: 0 }}>
           {largeCharts.map(c => (
             <div key={c.id} style={{ flex: 1, minHeight: 0 }}>
-              <GenericChart title={c.title} data={c.data} type={c.type} onRemove={() => removeChart(c.id)} size="lg" />
+              <GenericChart title={c.title} data={c.data} globalTotal={c.globalTotal} type={c.type} onRemove={() => removeChart(c.id)} size="lg" />
             </div>
           ))}
         </div>
