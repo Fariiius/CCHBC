@@ -19,13 +19,14 @@ const fmt = (v: number, isPercent = false): string => {
 // ── Filter Pills Bar (Power BI style) ───────────────────────────────────────
 
 export const FilterBar = () => {
-  const { sheets, masterFilters, toggleFilter, resetFilters } = useDashboard();
+  const { workspaces, activeWorkspaceId, toggleFilter, resetFilters } = useDashboard();
+  const ws = workspaces.find(w => w.id === activeWorkspaceId);
 
   const filterableCols = useMemo(() => {
+    if (!ws) return [];
     const map = new Map<string, Set<string>>();
-    sheets.forEach(sheet => {
+    ws.sheets.forEach(sheet => {
       [...sheet.categoricalCols, ...sheet.dateCols].forEach(col => {
-        // Exclude 'Total' from filters as well
         const vals = new Set(sheet.records.map(r => String(r[col] ?? '')).filter(v => v && v !== 'undefined' && v !== 'null' && !v.toLowerCase().includes('total')));
         if (vals.size >= 2 && vals.size <= 20) {
           if (!map.has(col)) map.set(col, new Set());
@@ -37,11 +38,11 @@ export const FilterBar = () => {
       .filter(([_, s]) => s.size >= 2 && s.size <= 20)
       .map(([col, s]) => ({ col, values: Array.from(s).sort() }))
       .slice(0, 5);
-  }, [sheets]);
+  }, [ws]);
 
-  if (filterableCols.length === 0) return null;
+  if (!ws || filterableCols.length === 0) return null;
 
-  const hasActive = Object.values(masterFilters).some(v => v.length > 0);
+  const hasActive = Object.values(ws.masterFilters).some(v => v.length > 0);
 
   return (
     <div style={{
@@ -50,7 +51,7 @@ export const FilterBar = () => {
       flexShrink: 0, minHeight: 0,
     }}>
       {filterableCols.map(({ col, values }) => {
-        const active = masterFilters[col] || [];
+        const active = ws.masterFilters[col] || [];
         return values.map(val => (
           <button key={`${col}-${val}`} onClick={() => toggleFilter(col, val)} style={{
             padding: '0.2rem 0.6rem', borderRadius: 4, fontSize: '0.68rem',
@@ -106,8 +107,6 @@ const GenericChart = ({ title, data, globalTotal, type, onRemove, size }: {
 }) => {
   const [h, setH] = useState(false);
   const chartData = data.map((d, i) => ({ name: d.name, value: Math.abs(d.value), itemStyle: { color: COLORS[i % COLORS.length] } }));
-  // Instead of summing up current filtered slices, we use the globalTotal passed in
-  // so that if a user filters to 1 slice, it still shows "14%" instead of recalculating to "100%"
   const denominator = globalTotal > 0 ? globalTotal : 1;
 
   let option: any = {};
@@ -192,10 +191,14 @@ const Overlay = ({ children, onClose }: { children: React.ReactNode; onClose: ()
 const sel: React.CSSProperties = { width: '100%', padding: '0.5rem', background: '#f8f9fa', border: '1px solid #e8eaed', borderRadius: 6, fontSize: '0.8rem', outline: 'none', color: '#202124' };
 
 const AddKpiModal = ({ onClose }: { onClose: () => void }) => {
-  const { addKpi, sheets } = useDashboard();
+  const { workspaces, activeWorkspaceId, addKpi } = useDashboard();
+  const ws = workspaces.find(w => w.id === activeWorkspaceId);
+  const sheets = ws?.sheets || [];
+  
   const [sn, setSn] = useState(sheets[0]?.name || '');
   const [col, setCol] = useState('');
   const s = sheets.find(x => x.name === sn) || sheets[0];
+  
   return (
     <Overlay onClose={onClose}>
       <div style={{ fontWeight: 700, marginBottom: '1rem' }}>Add KPI Card</div>
@@ -210,12 +213,16 @@ const AddKpiModal = ({ onClose }: { onClose: () => void }) => {
 };
 
 const AddChartModal = ({ onClose }: { onClose: () => void }) => {
-  const { addChart, sheets } = useDashboard();
+  const { workspaces, activeWorkspaceId, addChart } = useDashboard();
+  const ws = workspaces.find(w => w.id === activeWorkspaceId);
+  const sheets = ws?.sheets || [];
+
   const [sn, setSn] = useState(sheets[0]?.name || '');
   const [cat, setCat] = useState('');
   const [val, setVal] = useState('');
   const [type, setType] = useState<'pie'|'bar'|'line'>('pie');
   const s = sheets.find(x => x.name === sn) || sheets[0];
+
   return (
     <Overlay onClose={onClose}>
       <div style={{ fontWeight: 700, marginBottom: '1rem' }}>Add Chart</div>
@@ -236,18 +243,21 @@ const AddChartModal = ({ onClose }: { onClose: () => void }) => {
 // ── Main Dashboard View (Summary Only) ──────────────────────────────────────
 
 export const DashboardView = () => {
-  const { sheets, kpiConfigs, removeKpi, chartConfigs, removeChart, getFilteredRecords } = useDashboard();
+  const { workspaces, activeWorkspaceId, removeKpi, removeChart, getFilteredRecords } = useDashboard();
+  const ws = workspaces.find(w => w.id === activeWorkspaceId);
   const [showKpiModal, setShowKpiModal] = useState(false);
   const [showChartModal, setShowChartModal] = useState(false);
+
+  if (!ws) return null;
 
   // Collect all KPIs across all sheets
   let totalSpend = 0;
   let totalSaving = 0;
 
   const allKpis = useMemo(() => {
-    return sheets.flatMap(sheet => {
+    return ws.sheets.flatMap(sheet => {
       const filtered = getFilteredRecords(sheet.name);
-      return kpiConfigs.filter(k => k.sheetName === sheet.name).map(k => {
+      return ws.kpiConfigs.filter(k => k.sheetName === sheet.name).map(k => {
         const total = filtered.reduce((s, r) => {
           const v = r[k.col]; const n = typeof v === 'number' ? v : Number(String(v).replace(/[,$%€£\s]/g, '')); return s + (isFinite(n) ? n : 0);
         }, 0);
@@ -255,7 +265,6 @@ export const DashboardView = () => {
         let label = `Sum of ${k.col}`;
         const lcol = k.col.toLowerCase();
         
-        // Match user's exact requested labels
         if (lcol.includes('spend')) {
           label = 'Sum YTD Spend';
           totalSpend += total;
@@ -267,20 +276,17 @@ export const DashboardView = () => {
         return { id: k.id, label, value: total };
       });
     });
-  }, [sheets, kpiConfigs, getFilteredRecords]);
+  }, [ws, getFilteredRecords]);
 
-  // Calculate the custom KPI the user asked for: Saving vs Spending Percentage
   const savingVsSpendingPct = (totalSpend !== 0 && totalSaving !== 0) ? Math.abs((totalSaving / totalSpend) * 100) : null;
 
   // Collect all charts across all sheets
   const allCharts = useMemo(() => {
-    return sheets.flatMap(sheet => {
+    return ws.sheets.flatMap(sheet => {
       const filtered = getFilteredRecords(sheet.name);
-      const unfiltered = sheet.records; // Need unfiltered for global denominator
+      const unfiltered = sheet.records; 
 
-      return chartConfigs.filter(c => c.sheetName === sheet.name).map(c => {
-        
-        // 1. Calculate global total before any filters are applied
+      return ws.chartConfigs.filter(c => c.sheetName === sheet.name).map(c => {
         let globalTotal = 0;
         unfiltered.forEach(r => {
           const key = String(r[c.categoryCol] ?? '').trim();
@@ -289,7 +295,6 @@ export const DashboardView = () => {
           if (isFinite(n)) globalTotal += Math.abs(n);
         });
 
-        // 2. Calculate the filtered data that will actually be drawn
         const map = new Map<string, number>();
         filtered.forEach(r => {
           const key = String(r[c.categoryCol] ?? '').trim();
@@ -302,11 +307,10 @@ export const DashboardView = () => {
         return { id: c.id, title: c.title, type: c.type, data, globalTotal };
       });
     });
-  }, [sheets, chartConfigs, getFilteredRecords]);
+  }, [ws, getFilteredRecords]);
 
-  // Max charts allowed based on Power BI layout: 2 small, 3 large (total 5)
   const smallCharts = allCharts.slice(0, 2);
-  const largeCharts = allCharts.slice(2, 5); // strict cut off to protect layout
+  const largeCharts = allCharts.slice(2, 5);
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0, padding: '0.6rem 1rem', gap: '0.5rem' }}>
@@ -316,7 +320,6 @@ export const DashboardView = () => {
         {allKpis.slice(0, 3).map(k => (
           <KPICard key={k.id} label={k.label} value={k.value} onRemove={() => removeKpi(k.id)} />
         ))}
-        {/* Inject the custom Saving vs Spending % KPI if applicable */}
         {savingVsSpendingPct !== null && (
           <KPICard label="Saving vs Spending %" value={savingVsSpendingPct} isPercent={true} />
         )}

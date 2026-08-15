@@ -31,20 +31,32 @@ export interface KpiConfig {
   col: string;
 }
 
-interface DashboardContextProps {
+export interface Workspace {
+  id: string;
+  fileName: string;
   sheets: SheetAnalysis[];
+  chartConfigs: ChartConfig[];
+  kpiConfigs: KpiConfig[];
+  masterFilters: Record<string, string[]>;
+}
+
+interface DashboardContextProps {
+  workspaces: Workspace[];
+  activeWorkspaceId: string | null;
   loading: boolean;
   error: string | null;
-  fileName: string;
-  masterFilters: Record<string, string[]>;
+  
+  // Workspace Management
+  switchWorkspace: (id: string) => void;
+  closeWorkspace: (id: string) => void;
+  handleFileUpload: (file: File, isUpdateForId?: string) => Promise<void>;
+  resetDashboard: () => void;
+  
+  // Active Workspace Operations
   toggleFilter: (col: string, val: string) => void;
   resetFilters: () => void;
-  handleFileUpload: (file: File) => Promise<void>;
-  resetDashboard: () => void;
-  chartConfigs: ChartConfig[];
   addChart: (sheetName: string, categoryCol: string, valueCol: string, type: 'pie'|'bar'|'line') => void;
   removeChart: (id: string) => void;
-  kpiConfigs: KpiConfig[];
   addKpi: (sheetName: string, col: string) => void;
   removeKpi: (id: string) => void;
   getFilteredRecords: (sheetName: string) => DataRecord[];
@@ -84,7 +96,6 @@ const isIgnoredNumericCol = (colName: string, values: number[]): boolean => {
   return false;
 };
 
-// Advanced Grid Detection
 const splitIntoBlocks = (rawArray: any[][]): any[][][] => {
   if (!rawArray || rawArray.length === 0) return [];
   interface Cell { r: number; c: number; }
@@ -217,15 +228,12 @@ const analyzeSheet = (name: string, rawArray: any[][]): SheetAnalysis => {
 // ─── Provider ───────────────────────────────────────────────────────────────
 
 export const DashboardProvider = ({ children }: { children: ReactNode }) => {
-  const [sheets, setSheets] = useState<SheetAnalysis[]>([]);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [fileName, setFileName] = useState('');
-  const [masterFilters, setMasterFilters] = useState<Record<string, string[]>>({});
-  const [chartConfigs, setChartConfigs] = useState<ChartConfig[]>([]);
-  const [kpiConfigs, setKpiConfigs] = useState<KpiConfig[]>([]);
 
-  const handleFileUpload = async (file: File) => {
+  const handleFileUpload = async (file: File, isUpdateForId?: string) => {
     setLoading(true);
     setError(null);
     try {
@@ -253,7 +261,6 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
           const total = sheet.records.reduce((s, r) => s + (parseNumber(r[col]) ?? 0), 0);
           let score = Math.abs(total);
           const lcol = col.toLowerCase();
-          // Boost score massively for important keywords so they always win
           if (lcol.includes('spend')) score *= 1e6;
           if (lcol.includes('saving')) score *= 1e6;
           if (lcol.includes('total')) score *= 1e5;
@@ -264,7 +271,6 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
       });
       allKpiCands.sort((a, b) => b.score - a.score);
       
-      // Deduplicate by column name to avoid repetitive KPIs
       const seenKpiCols = new Set<string>();
       const topKpis: KpiConfig[] = [];
       for (const k of allKpiCands) {
@@ -306,13 +312,11 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
       const topCharts: ChartConfig[] = [];
       for (const c of allChartCands) {
         const combo = `${c.cat}-${c.val}`;
-        if (!seenChartCombos.has(combo) && topCharts.length < 5) { // Max 5 charts
+        if (!seenChartCombos.has(combo) && topCharts.length < 5) {
           seenChartCombos.add(combo);
-          // If it's a date/month, use line. If it's the 3rd or 4th chart, maybe bar. Else pie.
           let type: 'pie' | 'bar' | 'line' = 'pie';
           if (c.isDate) type = 'line';
           else if (topCharts.length >= 2 && topCharts.length <= 3) type = 'bar';
-
           topCharts.push({
             id: `auto-chart-${Date.now()}-${topCharts.length}`,
             sheetName: c.sheet,
@@ -324,11 +328,36 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
         }
       }
 
-      setSheets(analyzed);
-      setChartConfigs(topCharts);
-      setKpiConfigs(topKpis);
-      setFileName(file.name);
-      setMasterFilters({});
+      setWorkspaces(prev => {
+        if (isUpdateForId) {
+          // Update existing workspace but keep layout if possible
+          return prev.map(w => {
+            if (w.id === isUpdateForId) {
+              return {
+                ...w,
+                fileName: file.name,
+                sheets: analyzed,
+                // Keep existing configs so user doesn't lose their custom charts on update
+                // (Assuming columns haven't drastically changed)
+              };
+            }
+            return w;
+          });
+        } else {
+          // Create new workspace
+          const newId = `ws-${Date.now()}`;
+          const newWs: Workspace = {
+            id: newId,
+            fileName: file.name,
+            sheets: analyzed,
+            chartConfigs: topCharts,
+            kpiConfigs: topKpis,
+            masterFilters: {}
+          };
+          setActiveWorkspaceId(newId);
+          return [...prev, newWs];
+        }
+      });
 
     } catch (err: any) {
       setError(err.message || 'Failed to parse file.');
@@ -337,44 +366,77 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const toggleFilter = (col: string, val: string) => {
-    setMasterFilters(prev => {
-      const colVals = prev[col] || [];
-      const newVals = colVals.includes(val) ? colVals.filter(v => v !== val) : [...colVals, val];
-      return { ...prev, [col]: newVals };
+  const switchWorkspace = (id: string) => setActiveWorkspaceId(id);
+  
+  const closeWorkspace = (id: string) => {
+    setWorkspaces(prev => {
+      const next = prev.filter(w => w.id !== id);
+      if (activeWorkspaceId === id) {
+        setActiveWorkspaceId(next.length > 0 ? next[next.length - 1].id : null);
+      }
+      return next;
     });
   };
 
-  const resetFilters = () => setMasterFilters({});
+  const updateActiveWorkspace = (updater: (ws: Workspace) => Workspace) => {
+    setWorkspaces(prev => prev.map(w => w.id === activeWorkspaceId ? updater(w) : w));
+  };
+
+  const toggleFilter = (col: string, val: string) => {
+    updateActiveWorkspace(ws => {
+      const colVals = ws.masterFilters[col] || [];
+      const newVals = colVals.includes(val) ? colVals.filter(v => v !== val) : [...colVals, val];
+      return { ...ws, masterFilters: { ...ws.masterFilters, [col]: newVals } };
+    });
+  };
+
+  const resetFilters = () => {
+    updateActiveWorkspace(ws => ({ ...ws, masterFilters: {} }));
+  };
 
   const resetDashboard = () => {
-    setSheets([]);
-    setChartConfigs([]);
-    setKpiConfigs([]);
-    setFileName('');
-    setMasterFilters({});
+    setWorkspaces([]);
+    setActiveWorkspaceId(null);
     setError(null);
   };
 
   const addChart = (sheetName: string, categoryCol: string, valueCol: string, type: 'pie'|'bar'|'line') => {
-    setChartConfigs(prev => [...prev, {
-      id: `user-chart-${Date.now()}`, sheetName, categoryCol, valueCol, title: `${valueCol} by ${categoryCol}`, type
-    }]);
+    updateActiveWorkspace(ws => ({
+      ...ws,
+      chartConfigs: [...ws.chartConfigs, {
+        id: `user-chart-${Date.now()}`, sheetName, categoryCol, valueCol, title: `${valueCol} by ${categoryCol}`, type
+      }]
+    }));
   };
 
-  const removeChart = (id: string) => setChartConfigs(prev => prev.filter(c => c.id !== id));
+  const removeChart = (id: string) => {
+    updateActiveWorkspace(ws => ({
+      ...ws,
+      chartConfigs: ws.chartConfigs.filter(c => c.id !== id)
+    }));
+  };
 
   const addKpi = (sheetName: string, col: string) => {
-    setKpiConfigs(prev => [...prev, { id: `user-kpi-${Date.now()}`, sheetName, col }]);
+    updateActiveWorkspace(ws => ({
+      ...ws,
+      kpiConfigs: [...ws.kpiConfigs, { id: `user-kpi-${Date.now()}`, sheetName, col }]
+    }));
   };
 
-  const removeKpi = (id: string) => setKpiConfigs(prev => prev.filter(k => k.id !== id));
+  const removeKpi = (id: string) => {
+    updateActiveWorkspace(ws => ({
+      ...ws,
+      kpiConfigs: ws.kpiConfigs.filter(k => k.id !== id)
+    }));
+  };
 
   const getFilteredRecords = (sheetName: string): DataRecord[] => {
-    const sheet = sheets.find(s => s.name === sheetName);
+    const ws = workspaces.find(w => w.id === activeWorkspaceId);
+    if (!ws) return [];
+    const sheet = ws.sheets.find(s => s.name === sheetName);
     if (!sheet) return [];
     return sheet.records.filter(row => {
-      return Object.entries(masterFilters).every(([col, vals]) => {
+      return Object.entries(ws.masterFilters).every(([col, vals]) => {
         if (!vals || vals.length === 0) return true;
         if (!(col in row)) return true; 
         return vals.includes(String(row[col] ?? ''));
@@ -384,11 +446,9 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <DashboardContext.Provider value={{
-      sheets, loading, error, fileName, masterFilters,
-      toggleFilter, resetFilters, handleFileUpload, resetDashboard,
-      chartConfigs, addChart, removeChart,
-      kpiConfigs, addKpi, removeKpi,
-      getFilteredRecords
+      workspaces, activeWorkspaceId, loading, error,
+      switchWorkspace, closeWorkspace, handleFileUpload, resetDashboard,
+      toggleFilter, resetFilters, addChart, removeChart, addKpi, removeKpi, getFilteredRecords
     }}>
       {children}
     </DashboardContext.Provider>
