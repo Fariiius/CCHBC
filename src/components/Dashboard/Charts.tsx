@@ -221,20 +221,42 @@ const AddChartModal = ({ onClose }: { onClose: () => void }) => {
   const [cat, setCat] = useState('');
   const [val, setVal] = useState('');
   const [type, setType] = useState<'pie'|'bar'|'line'>('pie');
+  const [selectedCats, setSelectedCats] = useState<string[]>([]);
   const s = sheets.find(x => x.name === sn) || sheets[0];
+
+  const availableCategories = useMemo(() => {
+    if (!s || !cat) return [];
+    return Array.from(new Set(s.records.map(r => String(r[cat] ?? '')).filter(v => v && v !== 'undefined' && v !== 'null' && !v.toLowerCase().includes('total')))).sort();
+  }, [s, cat]);
 
   return (
     <Overlay onClose={onClose}>
       <div style={{ fontWeight: 700, marginBottom: '1rem' }}>Add Chart</div>
       {sheets.length > 1 && <div style={{ marginBottom: 8 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Table</label><select value={sn} onChange={e => { setSn(e.target.value); setCat(''); setVal(''); }} style={sel}>{sheets.map(x => <option key={x.name} value={x.name}>{x.name}</option>)}</select></div>}
       <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-        <div style={{ flex: 1 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Group By</label><select value={cat} onChange={e => setCat(e.target.value)} style={sel}><option value="">Select...</option>{s && [...s.categoricalCols, ...s.dateCols].map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+        <div style={{ flex: 1 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Group By</label><select value={cat} onChange={e => { setCat(e.target.value); setSelectedCats([]); }} style={sel}><option value="">Select...</option>{s && [...s.categoricalCols, ...s.dateCols].map(c => <option key={c} value={c}>{c}</option>)}</select></div>
         <div style={{ flex: 1 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Value</label><select value={val} onChange={e => setVal(e.target.value)} style={sel}><option value="">Select...</option>{s?.numericCols.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
       </div>
+      {availableCategories.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Categories to Compare (Optional)</label>
+          <div style={{ maxHeight: 100, overflowY: 'auto', border: '1px solid #e8eaed', borderRadius: 6, padding: '0.5rem', background: '#f8f9fa', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {availableCategories.map(c => (
+              <label key={c} style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input type="checkbox" checked={selectedCats.includes(c)} onChange={e => {
+                  if (e.target.checked) setSelectedCats([...selectedCats, c]);
+                  else setSelectedCats(selectedCats.filter(x => x !== c));
+                }} />
+                {c}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
       <div style={{ marginBottom: 12 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Chart Type</label><select value={type} onChange={e => setType(e.target.value as any)} style={sel}><option value="pie">Pie Chart</option><option value="bar">Bar (Column) Chart</option><option value="line">Line Chart</option></select></div>
       <div style={{ display: 'flex', gap: 8 }}>
         <button onClick={onClose} style={{ flex: 1, padding: '0.5rem', borderRadius: 6, background: '#f1f3f4', fontWeight: 600, fontSize: '0.8rem', border: '1px solid #e8eaed' }}>Cancel</button>
-        <button disabled={!cat || !val} onClick={() => { addChart(sn, cat, val, type); onClose(); }} style={{ flex: 1, padding: '0.5rem', borderRadius: 6, background: cat && val ? 'var(--primary)' : '#e8eaed', color: cat && val ? 'white' : '#80868b', fontWeight: 600, fontSize: '0.8rem' }}>Add</button>
+        <button disabled={!cat || !val} onClick={() => { addChart(sn, cat, val, type, selectedCats.length > 0 ? selectedCats : undefined); onClose(); }} style={{ flex: 1, padding: '0.5rem', borderRadius: 6, background: cat && val ? 'var(--primary)' : '#e8eaed', color: cat && val ? 'white' : '#80868b', fontWeight: 600, fontSize: '0.8rem' }}>Add</button>
       </div>
     </Overlay>
   );
@@ -291,6 +313,7 @@ export const DashboardView = () => {
         unfiltered.forEach(r => {
           const key = String(r[c.categoryCol] ?? '').trim();
           if (!key || key === 'undefined' || key.toLowerCase().includes('total')) return;
+          if (c.categoriesToCompare && c.categoriesToCompare.length > 0 && !c.categoriesToCompare.includes(key)) return;
           const v = r[c.valueCol]; const n = typeof v === 'number' ? v : Number(String(v).replace(/[,$%€£\s]/g, ''));
           if (isFinite(n)) globalTotal += Math.abs(n);
         });
@@ -299,6 +322,7 @@ export const DashboardView = () => {
         filtered.forEach(r => {
           const key = String(r[c.categoryCol] ?? '').trim();
           if (!key || key === 'undefined' || key.toLowerCase().includes('total')) return;
+          if (c.categoriesToCompare && c.categoriesToCompare.length > 0 && !c.categoriesToCompare.includes(key)) return;
           const v = r[c.valueCol]; const n = typeof v === 'number' ? v : Number(String(v).replace(/[,$%€£\s]/g, ''));
           map.set(key, (map.get(key) || 0) + (isFinite(n) ? n : 0));
         });
