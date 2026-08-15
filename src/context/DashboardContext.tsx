@@ -24,12 +24,14 @@ export interface ChartConfig {
   title: string;
   type: 'pie' | 'bar' | 'line';
   categoriesToCompare?: string[];
+  x?: number; y?: number; w?: number; h?: number;
 }
 
 export interface KpiConfig {
   id: string;
   sheetName: string;
   col: string;
+  x?: number; y?: number; w?: number; h?: number;
 }
 
 export interface Workspace {
@@ -39,6 +41,7 @@ export interface Workspace {
   chartConfigs: ChartConfig[];
   kpiConfigs: KpiConfig[];
   masterFilters: Record<string, string[]>;
+  crossFilters: Record<string, string[]>;
 }
 
 interface DashboardContextProps {
@@ -59,10 +62,15 @@ interface DashboardContextProps {
   // Active Workspace Operations
   toggleFilter: (col: string, val: string) => void;
   resetFilters: () => void;
+  addCrossFilter: (col: string, val: string) => void;
+  removeCrossFilter: (col: string, val: string) => void;
+  clearCrossFilters: () => void;
   addChart: (sheetName: string, categoryCol: string, valueCol: string, type: 'pie'|'bar'|'line', categoriesToCompare?: string[]) => void;
   removeChart: (id: string) => void;
+  updateChartLayout: (id: string, layout: {x: number, y: number, w: number, h: number}) => void;
   addKpi: (sheetName: string, col: string) => void;
   removeKpi: (id: string) => void;
+  updateKpiLayout: (id: string, layout: {x: number, y: number, w: number, h: number}) => void;
   getFilteredRecords: (sheetName: string) => DataRecord[];
 }
 
@@ -154,7 +162,12 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     for (const k of allKpiCands) {
       if (!seenKpiCols.has(k.col) && topKpis.length < 4) {
         seenKpiCols.add(k.col);
-        topKpis.push({ id: `auto-kpi-${Date.now()}-${topKpis.length}`, sheetName: k.sheet, col: k.col });
+        topKpis.push({ 
+          id: `auto-kpi-${Date.now()}-${topKpis.length}`, 
+          sheetName: k.sheet, 
+          col: k.col,
+          x: topKpis.length * 3, y: 0, w: 3, h: 2
+        });
       }
     }
 
@@ -184,7 +197,8 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
         topCharts.push({
           id: `auto-chart-${Date.now()}-${topCharts.length}`,
           sheetName: c.sheet, categoryCol: c.cat, valueCol: c.val,
-          title: `${c.val} by ${c.cat}`, type: c.isDate ? 'line' : 'pie'
+          title: `${c.val} by ${c.cat}`, type: c.isDate ? 'line' : 'pie',
+          x: (topCharts.length % 2) * 6, y: 2 + Math.floor(topCharts.length / 2) * 6, w: 6, h: 6
         });
       }
     }
@@ -198,7 +212,7 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
         const newId = `ws-${Date.now()}`;
         const newWs: Workspace = {
           id: newId, fileName: stagingWorkspace.fileName, sheets: analyzed,
-          chartConfigs: topCharts, kpiConfigs: topKpis, masterFilters: {}
+          chartConfigs: topCharts, kpiConfigs: topKpis, masterFilters: {}, crossFilters: {}
         };
         setActiveWorkspaceId(newId);
         return [...prev, newWs];
@@ -237,7 +251,31 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const resetFilters = () => {
-    updateActiveWorkspace(ws => ({ ...ws, masterFilters: {} }));
+    updateActiveWorkspace(ws => ({ ...ws, masterFilters: {}, crossFilters: {} }));
+  };
+
+  const addCrossFilter = (col: string, val: string) => {
+    updateActiveWorkspace(ws => {
+      const colVals = ws.crossFilters[col] || [];
+      if (!colVals.includes(val)) {
+        return { ...ws, crossFilters: { ...ws.crossFilters, [col]: [...colVals, val] } };
+      }
+      return ws;
+    });
+  };
+
+  const removeCrossFilter = (col: string, val: string) => {
+    updateActiveWorkspace(ws => {
+      const colVals = ws.crossFilters[col] || [];
+      const newVals = colVals.filter(v => v !== val);
+      const newCrossFilters = { ...ws.crossFilters, [col]: newVals };
+      if (newVals.length === 0) delete newCrossFilters[col];
+      return { ...ws, crossFilters: newCrossFilters };
+    });
+  };
+
+  const clearCrossFilters = () => {
+    updateActiveWorkspace(ws => ({ ...ws, crossFilters: {} }));
   };
 
   const resetDashboard = () => {
@@ -250,7 +288,8 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     updateActiveWorkspace(ws => ({
       ...ws,
       chartConfigs: [...ws.chartConfigs, {
-        id: `user-chart-${Date.now()}`, sheetName, categoryCol, valueCol, title: `${valueCol} by ${categoryCol}`, type, categoriesToCompare
+        id: `user-chart-${Date.now()}`, sheetName, categoryCol, valueCol, title: `${valueCol} by ${categoryCol}`, type, categoriesToCompare,
+        x: 0, y: 100, w: 6, h: 6
       }]
     }));
   };
@@ -262,10 +301,17 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     }));
   };
 
+  const updateChartLayout = (id: string, layout: {x: number, y: number, w: number, h: number}) => {
+    updateActiveWorkspace(ws => ({
+      ...ws,
+      chartConfigs: ws.chartConfigs.map(c => c.id === id ? { ...c, ...layout } : c)
+    }));
+  };
+
   const addKpi = (sheetName: string, col: string) => {
     updateActiveWorkspace(ws => ({
       ...ws,
-      kpiConfigs: [...ws.kpiConfigs, { id: `user-kpi-${Date.now()}`, sheetName, col }]
+      kpiConfigs: [...ws.kpiConfigs, { id: `user-kpi-${Date.now()}`, sheetName, col, x: 0, y: 100, w: 3, h: 2 }]
     }));
   };
 
@@ -276,15 +322,31 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     }));
   };
 
+  const updateKpiLayout = (id: string, layout: {x: number, y: number, w: number, h: number}) => {
+    updateActiveWorkspace(ws => ({
+      ...ws,
+      kpiConfigs: ws.kpiConfigs.map(k => k.id === id ? { ...k, ...layout } : k)
+    }));
+  };
+
   const getFilteredRecords = (sheetName: string): DataRecord[] => {
     const ws = workspaces.find(w => w.id === activeWorkspaceId);
     if (!ws) return [];
     const sheet = ws.sheets.find(s => s.name === sheetName);
     if (!sheet) return [];
     return sheet.records.filter(row => {
-      return Object.entries(ws.masterFilters).every(([col, vals]) => {
+      // Apply master filters
+      const passMaster = Object.entries(ws.masterFilters).every(([col, vals]) => {
         if (!vals || vals.length === 0) return true;
         if (!(col in row)) return true; 
+        return vals.includes(String(row[col] ?? ''));
+      });
+      if (!passMaster) return false;
+
+      // Apply cross filters
+      return Object.entries(ws.crossFilters).every(([col, vals]) => {
+        if (!vals || vals.length === 0) return true;
+        if (!(col in row)) return true;
         return vals.includes(String(row[col] ?? ''));
       });
     });
@@ -295,7 +357,11 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
       workspaces, activeWorkspaceId, loading, error,
       switchWorkspace, closeWorkspace, handleFileUpload, resetDashboard,
       stagingWorkspace, confirmStaging, cancelStaging,
-      toggleFilter, resetFilters, addChart, removeChart, addKpi, removeKpi, getFilteredRecords
+      toggleFilter, resetFilters, 
+      addCrossFilter, removeCrossFilter, clearCrossFilters,
+      addChart, removeChart, updateChartLayout, 
+      addKpi, removeKpi, updateKpiLayout, 
+      getFilteredRecords
     }}>
       {children}
     </DashboardContext.Provider>
