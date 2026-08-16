@@ -30,17 +30,29 @@ export interface SheetPrepConfig {
   rawPreview: any[][];
 }
 
-export interface ChartConfig {
+export interface ChartSeries {
   id: string;
   sheetName: string;
-  categoryCol: string;
   valueCol: string;
   calcCol?: string;
   calcOp?: '+'|'-'|'*'|'/';
+  color?: string;
+}
+
+export interface ChartConfig {
+  id: string;
+  sheetName?: string; // Legacy
+  categoryCol: string;
+  valueCol?: string; // Legacy
+  calcCol?: string; // Legacy
+  calcOp?: '+'|'-'|'*'|'/'; // Legacy
+  
+  series?: ChartSeries[]; // New multi-series array
+  
   title: string;
-  type: 'pie' | 'bar' | 'line';
-  categoriesToCompare?: string[];
-  x?: number; y?: number; w?: number; h?: number;
+  type: 'bar' | 'line' | 'pie' | 'doughnut';
+  isPercentage?: boolean;
+  x: number; y: number; w: number; h: number;
 }
 
 export interface KpiConfig {
@@ -49,7 +61,8 @@ export interface KpiConfig {
   col: string;
   calcCol?: string;
   calcOp?: '+'|'-'|'*'|'/';
-  x?: number; y?: number; w?: number; h?: number;
+  isPercentage?: boolean;
+  x: number; y: number; w: number; h: number;
 }
 
 export interface Workspace {
@@ -87,10 +100,10 @@ interface DashboardContextProps {
   addCrossFilter: (col: string, val: string) => void;
   removeCrossFilter: (col: string, val: string) => void;
   clearCrossFilters: () => void;
-  addChart: (sheetName: string, categoryCol: string, valueCol: string, type: 'pie'|'bar'|'line', categoriesToCompare?: string[], calcCol?: string, calcOp?: '+'|'-'|'*'|'/') => void;
+  addChart: (config: Omit<ChartConfig, 'id' | 'x' | 'y' | 'w' | 'h'>) => void;
   removeChart: (id: string) => void;
   updateChartLayout: (id: string, layout: {x: number, y: number, w: number, h: number}) => void;
-  addKpi: (sheetName: string, col: string, calcCol?: string, calcOp?: '+'|'-'|'*'|'/') => void;
+  addKpi: (config: Omit<KpiConfig, 'id' | 'x' | 'y' | 'w' | 'h'>) => void;
   removeKpi: (id: string) => void;
   updateKpiLayout: (id: string, layout: {x: number, y: number, w: number, h: number}) => void;
   getFilteredRecords: (sheetName: string) => DataRecord[];
@@ -288,13 +301,23 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
 
       const topCharts: ChartConfig[] = [];
       const seenCombos = new Set<string>();
+      const colors = ['#1a73e8', '#e53935', '#34a853', '#fbbc04', '#8e24aa'];
+      
       for (const c of allChartCands) {
         if (!seenCombos.has(`${c.cat}-${c.val}`) && topCharts.length < 5) {
           seenCombos.add(`${c.cat}-${c.val}`);
+          
           topCharts.push({
             id: `auto-chart-${Date.now()}-${topCharts.length}`,
-            sheetName: c.sheet, categoryCol: c.cat, valueCol: c.val,
-            title: `${c.val} by ${c.cat}`, type: c.isDate ? 'line' : 'pie',
+            categoryCol: c.cat,
+            title: `${c.val} by ${c.cat}`, 
+            type: c.isDate ? 'line' : 'pie',
+            series: [{
+              id: `series-${Date.now()}`,
+              sheetName: c.sheet,
+              valueCol: c.val,
+              color: colors[0]
+            }],
             x: (topCharts.length % 2) * 6, y: 2 + Math.floor(topCharts.length / 2) * 6, w: 6, h: 6
           });
         }
@@ -383,11 +406,12 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     setError(null);
   };
 
-  const addChart = (sheetName: string, categoryCol: string, valueCol: string, type: 'pie'|'bar'|'line', categoriesToCompare?: string[], calcCol?: string, calcOp?: '+'|'-'|'*'|'/') => {
+  const addChart = (config: Omit<ChartConfig, 'id' | 'x' | 'y' | 'w' | 'h'>) => {
     updateActiveWorkspace(ws => ({
       ...ws,
       chartConfigs: [...ws.chartConfigs, {
-        id: `user-chart-${Date.now()}`, sheetName, categoryCol, valueCol, calcCol, calcOp, title: calcCol ? `${valueCol} ${calcOp} ${calcCol} by ${categoryCol}` : `${valueCol} by ${categoryCol}`, type, categoriesToCompare,
+        ...config,
+        id: `user-chart-${Date.now()}`, 
         x: 0, y: 100, w: 6, h: 6
       }]
     }));
@@ -407,10 +431,10 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     }));
   };
 
-  const addKpi = (sheetName: string, col: string, calcCol?: string, calcOp?: '+'|'-'|'*'|'/') => {
+  const addKpi = (config: Omit<KpiConfig, 'id' | 'x' | 'y' | 'w' | 'h'>) => {
     updateActiveWorkspace(ws => ({
       ...ws,
-      kpiConfigs: [...ws.kpiConfigs, { id: `user-kpi-${Date.now()}`, sheetName, col, calcCol, calcOp, x: 0, y: 100, w: 3, h: 2 }]
+      kpiConfigs: [...ws.kpiConfigs, { ...config, id: `user-kpi-${Date.now()}`, x: 0, y: 100, w: 3, h: 2 }]
     }));
   };
 
