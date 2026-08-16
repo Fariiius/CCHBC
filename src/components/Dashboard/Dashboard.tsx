@@ -164,33 +164,42 @@ export const Dashboard = () => {
                       <tbody>
                         {activeConfig.rawPreview.map((row, idx) => {
                           const isHeader = activeConfig.headerRowIdx === idx;
-                          const isExcluded = activeConfig.excludedRows.includes(idx);
+                          const isEndRow = activeConfig.dataEndRow === idx;
+                          const isOutsideBounds = (idx < activeConfig.headerRowIdx) || (activeConfig.dataEndRow !== undefined && idx > activeConfig.dataEndRow);
+                          const isExcluded = activeConfig.excludedRows.includes(idx) || isOutsideBounds;
+                          
                           return (
                             <tr key={idx} style={{ 
-                              background: isHeader ? '#e8f0fe' : (isExcluded ? '#f8f9fa' : 'white'), 
-                              opacity: isExcluded ? 0.4 : 1,
+                              background: isHeader ? '#e8f0fe' : (isEndRow ? '#fce8e6' : (isExcluded ? '#f8f9fa' : 'white')), 
+                              opacity: isExcluded && !isHeader && !isEndRow ? 0.4 : 1,
                               borderBottom: '1px solid var(--border)',
                               transition: 'background 0.2s'
                             }}>
                               <td style={{ padding: '0.5rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                 <button 
                                   onClick={() => {
-                                    if (isExcluded) {
+                                    if (activeConfig.excludedRows.includes(idx)) {
                                       updatePrepConfig(activeConfig.id, { excludedRows: activeConfig.excludedRows.filter(r => r !== idx) });
                                     } else {
                                       updatePrepConfig(activeConfig.id, { excludedRows: [...activeConfig.excludedRows, idx] });
                                     }
                                   }}
-                                  style={{ padding: 4, background: 'transparent', border: 'none', cursor: 'pointer', color: isExcluded ? '#5f6368' : '#d93025' }}
-                                  title={isExcluded ? "Restore Row" : "Exclude Row"}
+                                  style={{ padding: 4, background: 'transparent', border: 'none', cursor: 'pointer', color: activeConfig.excludedRows.includes(idx) ? '#5f6368' : '#d93025' }}
+                                  title={activeConfig.excludedRows.includes(idx) ? "Restore Row" : "Exclude Row"}
                                 >
-                                  {isExcluded ? <RefreshCw size={14} /> : <Trash2 size={14} />}
+                                  {activeConfig.excludedRows.includes(idx) ? <RefreshCw size={14} /> : <Trash2 size={14} />}
                                 </button>
                                 
                                 {isHeader ? (
                                   <span style={{ color: 'var(--primary)', fontWeight: 700, fontSize: '0.7rem', padding: '0.2rem 0.4rem', background: '#d2e3fc', borderRadius: 4 }}>HEADER</span>
                                 ) : (
-                                  <button onClick={() => updatePrepConfig(activeConfig.id, { headerRowIdx: idx })} disabled={isExcluded} style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', cursor: isExcluded ? 'not-allowed' : 'pointer', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--foreground)' }}>Set Header</button>
+                                  <button onClick={() => updatePrepConfig(activeConfig.id, { headerRowIdx: idx })} disabled={activeConfig.excludedRows.includes(idx)} style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', cursor: activeConfig.excludedRows.includes(idx) ? 'not-allowed' : 'pointer', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--foreground)' }}>Set Header</button>
+                                )}
+                                
+                                {isEndRow ? (
+                                  <span style={{ color: '#d93025', fontWeight: 700, fontSize: '0.7rem', padding: '0.2rem 0.4rem', background: '#fad2e1', borderRadius: 4 }}>END</span>
+                                ) : (
+                                  <button onClick={() => updatePrepConfig(activeConfig.id, { dataEndRow: activeConfig.dataEndRow === idx ? undefined : idx })} disabled={activeConfig.excludedRows.includes(idx) || idx <= activeConfig.headerRowIdx} style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', cursor: (activeConfig.excludedRows.includes(idx) || idx <= activeConfig.headerRowIdx) ? 'not-allowed' : 'pointer', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--foreground)' }}>Set End</button>
                                 )}
                               </td>
                               {row.map((cell, cIdx) => (

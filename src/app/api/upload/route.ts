@@ -58,6 +58,7 @@ export async function POST(req: Request) {
       id: name,
       originalSheetName: name,
       headerRowIdx: undefined,
+      dataEndRow: undefined,
       excludedRows: [],
       excludedCols: [],
       columnTypes: {}
@@ -109,8 +110,9 @@ export async function POST(req: Request) {
       const headers = config.excludedCols ? headersMap.filter(h => !config.excludedCols.includes(h.name)) : headersMap;
 
       const records: any[] = [];
+      const dataEndRow = config.dataEndRow !== undefined ? config.dataEndRow : (rawArray.length - 1);
       
-      for (let i = headerRowIdx + 1; i < rawArray.length; i++) {
+      for (let i = headerRowIdx + 1; i <= dataEndRow && i < rawArray.length; i++) {
         // Apply excluded rows from config
         if (config.excludedRows && config.excludedRows.includes(i)) continue;
 

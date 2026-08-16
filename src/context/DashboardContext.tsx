@@ -24,6 +24,7 @@ export interface SheetPrepConfig {
   id: string;
   originalSheetName: string;
   headerRowIdx: number;
+  dataEndRow?: number;
   excludedRows: number[];
   excludedCols: string[];
   columnTypes: Record<string, 'text'|'numeric'|'date'>;
