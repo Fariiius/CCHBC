@@ -20,6 +20,16 @@ export interface SheetAnalysis {
   isEmpty: boolean;
 }
 
+export interface SheetPrepConfig {
+  id: string;
+  originalSheetName: string;
+  headerRowIdx: number;
+  excludedRows: number[];
+  excludedCols: string[];
+  columnTypes: Record<string, 'text'|'numeric'|'date'>;
+  rawPreview: any[][];
+}
+
 export interface ChartConfig {
   id: string;
   sheetName: string;
@@ -58,18 +68,17 @@ interface DashboardContextProps {
   loading: boolean;
   error: string | null;
   stagedFile: File | null;
-  stagingWorkspace: {
-    datasetId?: string;
-    analyzed: SheetAnalysis[];
-  } | null;
+  stagingWorkspace: { configs: SheetPrepConfig[] } | null;
   
   // Workspace Management
   switchWorkspace: (id: string) => void;
   closeWorkspace: (id: string) => void;
-  handleFileUpload: (file: File, headerMapping?: Record<string, number>) => Promise<void>;
-  updateStagedColumnType: (sheetName: string, colName: string, newType: string) => void;
+  handleFileUpload: (file: File) => Promise<void>;
+  updatePrepConfig: (sheetId: string, updates: Partial<SheetPrepConfig>) => void;
+  duplicatePrepSheet: (sheetId: string) => void;
+  removePrepSheet: (sheetId: string) => void;
   resetDashboard: () => void;
-  confirmStaging: (relationships?: any) => void;
+  confirmStaging: () => void;
   cancelStaging: () => void;
 
   // Active Workspace Operations
@@ -107,7 +116,7 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
   const [error, setError] = useState<string | null>(null);
   const [stagedFile, setStagedFile] = useState<File | null>(null);
 
-  const [stagingWorkspace, setStagingWorkspace] = useState<{datasetId?: string; analyzed: SheetAnalysis[]} | null>(null);
+  const [stagingWorkspace, setStagingWorkspace] = useState<{configs: SheetPrepConfig[]} | null>(null);
   const [drillDownData, setDrillDownData] = useState<DataRecord[] | null>(null);
 
   // Load from LocalStorage on mount
@@ -133,26 +142,84 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [workspaces]);
 
-  const handleFileUpload = async (file: File, headerMapping?: Record<string, number>) => {
+  const handleFileUpload = async (file: File) => {
     setLoading(true);
     setError(null);
-    if (!headerMapping) setStagedFile(file);
+    setStagedFile(file);
     try {
       const formData = new FormData();
       formData.append('file', file);
-      if (headerMapping) {
-        formData.append('headerMapping', JSON.stringify(headerMapping));
-      }
       
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData
-      });
-
+      const res = await fetch('/api/preview', { method: 'POST', body: formData });
       const data = await res.json();
+      
+      if (!res.ok) throw new Error(data.error || 'Failed to generate preview');
+
+      const configs: SheetPrepConfig[] = data.sheets.map((s: any) => ({
+         id: s.id,
+         originalSheetName: s.originalSheetName,
+         headerRowIdx: s.defaultHeaderRowIdx,
+         excludedRows: [],
+         excludedCols: [],
+         columnTypes: {},
+         rawPreview: s.rawPreview
+      }));
+      setStagingWorkspace({ configs });
+    } catch (err: any) {
+      setError(err.message || 'Failed to read file.');
+      setStagedFile(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updatePrepConfig = (sheetId: string, updates: Partial<SheetPrepConfig>) => {
+    setStagingWorkspace(prev => {
+      if (!prev) return prev;
+      return {
+        configs: prev.configs.map(c => c.id === sheetId ? { ...c, ...updates } : c)
+      };
+    });
+  };
+
+  const duplicatePrepSheet = (sheetId: string) => {
+    setStagingWorkspace(prev => {
+      if (!prev) return prev;
+      const target = prev.configs.find(c => c.id === sheetId);
+      if (!target) return prev;
+      
+      const newSheet = { ...target, id: `${target.originalSheetName} (Copy ${Date.now().toString().slice(-4)})` };
+      const targetIdx = prev.configs.findIndex(c => c.id === sheetId);
+      
+      const newConfigs = [...prev.configs];
+      newConfigs.splice(targetIdx + 1, 0, newSheet);
+      
+      return { configs: newConfigs };
+    });
+  };
+
+  const removePrepSheet = (sheetId: string) => {
+    setStagingWorkspace(prev => {
+      if (!prev) return prev;
+      return { configs: prev.configs.filter(c => c.id !== sheetId) };
+    });
+  };
+
+  const confirmStaging = async () => {
+    if (!stagingWorkspace || !stagedFile) return;
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const formData = new FormData();
+      formData.append('file', stagedFile);
+      formData.append('prepConfig', JSON.stringify(stagingWorkspace.configs));
+      
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+
       if (!res.ok) throw new Error(data.error || 'Upload failed');
 
-      // Transform backend response into our client format for staging
       const analyzed: SheetAnalysis[] = data.sheets.map((s: any) => {
         const numericCols = s.columns.filter((c:any) => c.type === 'numeric').map((c:any) => c.name);
         const dateCols = s.columns.filter((c:any) => c.type === 'date').map((c:any) => c.name);
@@ -167,118 +234,90 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
           dateCols,
           records: s.records,
           totalRows: s.totalRows,
-          headerRowIdx: s.headerRowIdx,
-          rawPreview: s.rawPreview,
-          columns: s.columns,
           isEmpty: s.totalRows === 0
         };
       });
 
-      setStagingWorkspace({ datasetId: data.datasetId, analyzed });
+      // Smart Ranking for KPIs
+      let allKpiCands: { sheet: string, col: string, score: number, val: number }[] = [];
+      analyzed.forEach((sheet: SheetAnalysis) => {
+        sheet.numericCols.forEach(col => {
+          const total = sheet.records.reduce((s, r) => s + (Number(r[col]) || 0), 0);
+          let score = Math.abs(total);
+          const lcol = col.toLowerCase();
+          if (lcol.includes('spend')) score *= 1e6;
+          if (lcol.includes('saving')) score *= 1e6;
+          if (lcol.includes('total')) score *= 1e5;
+          if (lcol.includes('net')) score *= 1e4;
+          allKpiCands.push({ sheet: sheet.name, col, score, val: total });
+        });
+      });
+      allKpiCands.sort((a, b) => b.score - a.score);
+      
+      const seenKpiCols = new Set<string>();
+      const topKpis: KpiConfig[] = [];
+      for (const k of allKpiCands) {
+        if (!seenKpiCols.has(k.col) && topKpis.length < 4) {
+          seenKpiCols.add(k.col);
+          topKpis.push({ 
+            id: `auto-kpi-${Date.now()}-${topKpis.length}`, 
+            sheetName: k.sheet, 
+            col: k.col,
+            x: topKpis.length * 3, y: 0, w: 3, h: 2
+          });
+        }
+      }
 
+      // Smart Ranking for Charts
+      let allChartCands: { sheet: string, cat: string, val: string, score: number, isDate: boolean }[] = [];
+      analyzed.forEach((sheet: SheetAnalysis) => {
+        const topNumCols = [...sheet.numericCols].slice(0, 3);
+        const usefulCatCols = [...sheet.categoricalCols, ...sheet.dateCols];
+
+        topNumCols.forEach(val => {
+          usefulCatCols.forEach(cat => {
+            let score = 0;
+            if (val.toLowerCase().includes('spend')) score += 1000;
+            if (cat.toLowerCase().includes('month')) score += 500;
+            const isDate = sheet.dateCols.includes(cat) || cat.toLowerCase().includes('month') || cat.toLowerCase().includes('date');
+            allChartCands.push({ sheet: sheet.name, cat, val, score, isDate });
+          });
+        });
+      });
+      allChartCands.sort((a, b) => b.score - a.score);
+
+      const topCharts: ChartConfig[] = [];
+      const seenCombos = new Set<string>();
+      for (const c of allChartCands) {
+        if (!seenCombos.has(`${c.cat}-${c.val}`) && topCharts.length < 5) {
+          seenCombos.add(`${c.cat}-${c.val}`);
+          topCharts.push({
+            id: `auto-chart-${Date.now()}-${topCharts.length}`,
+            sheetName: c.sheet, categoryCol: c.cat, valueCol: c.val,
+            title: `${c.val} by ${c.cat}`, type: c.isDate ? 'line' : 'pie',
+            x: (topCharts.length % 2) * 6, y: 2 + Math.floor(topCharts.length / 2) * 6, w: 6, h: 6
+          });
+        }
+      }
+
+      setWorkspaces(prev => {
+          const newId = `ws-${Date.now()}`;
+          const newWs: Workspace = {
+            id: newId, fileName: stagedFile.name, sheets: analyzed,
+            chartConfigs: topCharts, kpiConfigs: topKpis, masterFilters: {}, crossFilters: {}
+          };
+          setActiveWorkspaceId(newId);
+          return [...prev, newWs];
+      });
+
+      setStagingWorkspace(null);
+      setStagedFile(null);
+      
     } catch (err: any) {
       setError(err.message || 'Failed to process file.');
     } finally {
       setLoading(false);
     }
-  };
-
-  const updateStagedColumnType = (sheetName: string, colName: string, newType: string) => {
-    if (!stagingWorkspace) return;
-    setStagingWorkspace(prev => {
-      if (!prev) return prev;
-      const analyzed = prev.analyzed.map(s => {
-        if (s.name !== sheetName || !s.columns) return s;
-        const columns = s.columns.map(c => c.name === colName ? { ...c, type: newType } : c);
-        const categoricalCols = columns.filter(c => c.type === 'text').map(c => c.name);
-        const numericCols = columns.filter(c => c.type === 'numeric').map(c => c.name);
-        const dateCols = columns.filter(c => c.type === 'date').map(c => c.name);
-        return { ...s, columns, categoricalCols, numericCols, dateCols };
-      });
-      return { ...prev, analyzed };
-    });
-  };
-
-  const confirmStaging = (relationships?: any) => {
-    if (!stagingWorkspace) return;
-    
-    // Process top KPIs and Charts based on staging data
-    const analyzed = stagingWorkspace.analyzed;
-    
-    // Smart Ranking for KPIs
-    let allKpiCands: { sheet: string, col: string, score: number, val: number }[] = [];
-    analyzed.forEach((sheet: SheetAnalysis) => {
-      sheet.numericCols.forEach(col => {
-        const total = sheet.records.reduce((s, r) => s + (Number(r[col]) || 0), 0);
-        let score = Math.abs(total);
-        const lcol = col.toLowerCase();
-        if (lcol.includes('spend')) score *= 1e6;
-        if (lcol.includes('saving')) score *= 1e6;
-        if (lcol.includes('total')) score *= 1e5;
-        if (lcol.includes('net')) score *= 1e4;
-        allKpiCands.push({ sheet: sheet.name, col, score, val: total });
-      });
-    });
-    allKpiCands.sort((a, b) => b.score - a.score);
-    
-    const seenKpiCols = new Set<string>();
-    const topKpis: KpiConfig[] = [];
-    for (const k of allKpiCands) {
-      if (!seenKpiCols.has(k.col) && topKpis.length < 4) {
-        seenKpiCols.add(k.col);
-        topKpis.push({ 
-          id: `auto-kpi-${Date.now()}-${topKpis.length}`, 
-          sheetName: k.sheet, 
-          col: k.col,
-          x: topKpis.length * 3, y: 0, w: 3, h: 2
-        });
-      }
-    }
-
-    // Smart Ranking for Charts
-    let allChartCands: { sheet: string, cat: string, val: string, score: number, isDate: boolean }[] = [];
-    analyzed.forEach((sheet: SheetAnalysis) => {
-      const topNumCols = [...sheet.numericCols].slice(0, 3);
-      const usefulCatCols = [...sheet.categoricalCols, ...sheet.dateCols];
-
-      topNumCols.forEach(val => {
-        usefulCatCols.forEach(cat => {
-          let score = 0;
-          if (val.toLowerCase().includes('spend')) score += 1000;
-          if (cat.toLowerCase().includes('month')) score += 500;
-          const isDate = sheet.dateCols.includes(cat) || cat.toLowerCase().includes('month') || cat.toLowerCase().includes('date');
-          allChartCands.push({ sheet: sheet.name, cat, val, score, isDate });
-        });
-      });
-    });
-    allChartCands.sort((a, b) => b.score - a.score);
-
-    const topCharts: ChartConfig[] = [];
-    const seenCombos = new Set<string>();
-    for (const c of allChartCands) {
-      if (!seenCombos.has(`${c.cat}-${c.val}`) && topCharts.length < 5) {
-        seenCombos.add(`${c.cat}-${c.val}`);
-        topCharts.push({
-          id: `auto-chart-${Date.now()}-${topCharts.length}`,
-          sheetName: c.sheet, categoryCol: c.cat, valueCol: c.val,
-          title: `${c.val} by ${c.cat}`, type: c.isDate ? 'line' : 'pie',
-          x: (topCharts.length % 2) * 6, y: 2 + Math.floor(topCharts.length / 2) * 6, w: 6, h: 6
-        });
-      }
-    }
-
-    setWorkspaces(prev => {
-        const newId = `ws-${Date.now()}`;
-        const newWs: Workspace = {
-          id: newId, fileName: stagedFile?.name || 'Uploaded File', sheets: analyzed,
-          chartConfigs: topCharts, kpiConfigs: topKpis, masterFilters: {}, crossFilters: {}
-        };
-        setActiveWorkspaceId(newId);
-        return [...prev, newWs];
-    });
-
-    setStagingWorkspace(null);
-    setStagedFile(null);
   };
 
   const cancelStaging = () => {
@@ -432,7 +471,8 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
   return (
     <DashboardContext.Provider value={{
       workspaces, activeWorkspaceId, loading, error, stagedFile, stagingWorkspace,
-      switchWorkspace, closeWorkspace, handleFileUpload, updateStagedColumnType, resetDashboard,
+      switchWorkspace, closeWorkspace, handleFileUpload, resetDashboard,
+      updatePrepConfig, duplicatePrepSheet, removePrepSheet,
       confirmStaging, cancelStaging,
       toggleFilter, resetFilters, 
       addCrossFilter, removeCrossFilter, clearCrossFilters,
