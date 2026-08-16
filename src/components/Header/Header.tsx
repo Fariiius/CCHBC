@@ -10,7 +10,7 @@ export const Header = () => {
   const updateInputRef = useRef<HTMLInputElement>(null);
 
   const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId);
-  const totalRows = activeWorkspace ? activeWorkspace.sheets.reduce((s, sh) => s + sh.rowCount, 0) : 0;
+  const totalRows = activeWorkspace ? activeWorkspace.sheets.reduce((s, sh) => s + sh.totalRows, 0) : 0;
 
   const onNewFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -20,13 +20,7 @@ export const Header = () => {
     }
   };
 
-  const onUpdateFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && activeWorkspaceId) {
-      handleFileUpload(file, activeWorkspaceId);
-      e.target.value = '';
-    }
-  };
+  // Update feature temporarily disabled pending Data Prep integration
 
   return (
     <header style={{
@@ -73,12 +67,6 @@ export const Header = () => {
         {activeWorkspace && (
           <div style={{ fontSize: '0.65rem', color: '#5f6368', marginRight: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <span>{totalRows.toLocaleString()} rows</span>
-            <span style={{ color: '#dadce0' }}>|</span>
-            <button onClick={() => updateInputRef.current?.click()} style={{
-              display: 'flex', alignItems: 'center', gap: 4, color: 'var(--primary)', fontWeight: 600, background: 'transparent'
-            }}>
-              <RefreshCw size={10} /> Update Data
-            </button>
           </div>
         )}
         <button
@@ -95,7 +83,6 @@ export const Header = () => {
       </div>
 
       <input type="file" accept=".xlsx,.xls,.csv" ref={fileInputRef} onChange={onNewFile} style={{ display: 'none' }} />
-      <input type="file" accept=".xlsx,.xls,.csv" ref={updateInputRef} onChange={onUpdateFile} style={{ display: 'none' }} />
     </header>
   );
 };
