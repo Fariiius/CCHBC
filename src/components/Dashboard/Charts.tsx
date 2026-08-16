@@ -25,7 +25,7 @@ const fmt = (v: number, isPercent = false): string => {
 // ── Filter Pills Bar (Power BI style) ───────────────────────────────────────
 
 export const FilterBar = () => {
-  const { workspaces, activeWorkspaceId, toggleFilter, resetFilters, crossFilters, removeCrossFilter, clearCrossFilters } = useDashboard();
+  const { workspaces, activeWorkspaceId, toggleFilter, resetFilters, removeCrossFilter, clearCrossFilters } = useDashboard();
   const ws = workspaces.find(w => w.id === activeWorkspaceId);
 
   const filterableCols = useMemo(() => {
@@ -263,7 +263,7 @@ export const DashboardView = () => {
   const layoutCharts = ws.chartConfigs.map(c => ({ i: c.id, x: c.x ?? 0, y: c.y ?? 2, w: c.w ?? 6, h: c.h ?? 6 }));
   const layouts = { lg: [...layoutKpis, ...layoutCharts] };
 
-  const onLayoutChange = (currentLayout: Layout[]) => {
+  const onLayoutChange = (currentLayout: Layout) => {
     currentLayout.forEach(l => {
       if (l.i.includes('kpi')) updateKpiLayout(l.i, { x: l.x, y: l.y, w: l.w, h: l.h });
       else updateChartLayout(l.i, { x: l.x, y: l.y, w: l.w, h: l.h });
@@ -282,6 +282,7 @@ export const DashboardView = () => {
          <button onClick={() => setShowChartModal(true)} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 4, padding: '0.3rem 0.6rem', fontSize: '0.7rem', fontWeight: 600, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}><Plus size={12}/> Chart</button>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
+        {/* @ts-ignore */}
         <ResponsiveGridLayout
           className="layout"
           layouts={layouts}
