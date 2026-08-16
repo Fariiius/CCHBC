@@ -53,12 +53,12 @@ export async function POST(req: Request) {
       const ws = wb.Sheets[sheetName];
       const rawArray = xlsx.utils.sheet_to_json(ws, { header: 1 }) as any[][];
       
-      // Simple header detection (first row with most strings)
+      // Find the first row that has some data to act as headers
       let headerRowIdx = 0;
       let maxStrings = 0;
       for (let i = 0; i < Math.min(rawArray.length, 20); i++) {
         const row = rawArray[i];
-        if (!row) continue;
+        if (!row || !Array.isArray(row)) continue;
         const stringCount = row.filter(val => typeof val === 'string' && val.trim() !== '').length;
         if (stringCount > maxStrings) {
           maxStrings = stringCount;
@@ -66,9 +66,33 @@ export async function POST(req: Request) {
         }
       }
 
-      if (maxStrings === 0 || rawArray.length <= headerRowIdx + 1) continue;
+      // If we couldn't find a row with strings, just use the very first non-empty row
+      if (maxStrings === 0) {
+        for (let i = 0; i < rawArray.length; i++) {
+            if (rawArray[i] && rawArray[i].length > 0) {
+                headerRowIdx = i;
+                break;
+            }
+        }
+      }
 
-      const headers = rawArray[headerRowIdx].map((h, i) => h ? String(h).trim() : `Column_${i}`);
+      if (rawArray.length <= headerRowIdx + 1) continue; // No data rows
+
+      const headerRow = rawArray[headerRowIdx] || [];
+      const rawHeaders = headerRow.map((h, i) => h !== undefined && h !== null && String(h).trim() !== '' ? String(h).trim() : `Column_${i+1}`);
+      
+      // Ensure unique headers
+      const headers: string[] = [];
+      const headerCounts: Record<string, number> = {};
+      rawHeaders.forEach(h => {
+          if (headerCounts[h]) {
+              headerCounts[h]++;
+              headers.push(`${h}_${headerCounts[h]}`);
+          } else {
+              headerCounts[h] = 1;
+              headers.push(h);
+          }
+      });
       const records: any[] = [];
       
       for (let i = headerRowIdx + 1; i < rawArray.length; i++) {
