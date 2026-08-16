@@ -21,6 +21,7 @@ export interface ChartConfig {
   sheetName: string;
   categoryCol: string;
   valueCol: string;
+  divideByCol?: string;
   title: string;
   type: 'pie' | 'bar' | 'line';
   categoriesToCompare?: string[];
@@ -31,6 +32,7 @@ export interface KpiConfig {
   id: string;
   sheetName: string;
   col: string;
+  divideByCol?: string;
   x?: number; y?: number; w?: number; h?: number;
 }
 
@@ -65,10 +67,10 @@ interface DashboardContextProps {
   addCrossFilter: (col: string, val: string) => void;
   removeCrossFilter: (col: string, val: string) => void;
   clearCrossFilters: () => void;
-  addChart: (sheetName: string, categoryCol: string, valueCol: string, type: 'pie'|'bar'|'line', categoriesToCompare?: string[]) => void;
+  addChart: (sheetName: string, categoryCol: string, valueCol: string, type: 'pie'|'bar'|'line', categoriesToCompare?: string[], divideByCol?: string) => void;
   removeChart: (id: string) => void;
   updateChartLayout: (id: string, layout: {x: number, y: number, w: number, h: number}) => void;
-  addKpi: (sheetName: string, col: string) => void;
+  addKpi: (sheetName: string, col: string, divideByCol?: string) => void;
   removeKpi: (id: string) => void;
   updateKpiLayout: (id: string, layout: {x: number, y: number, w: number, h: number}) => void;
   getFilteredRecords: (sheetName: string) => DataRecord[];
@@ -315,11 +317,11 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     setError(null);
   };
 
-  const addChart = (sheetName: string, categoryCol: string, valueCol: string, type: 'pie'|'bar'|'line', categoriesToCompare?: string[]) => {
+  const addChart = (sheetName: string, categoryCol: string, valueCol: string, type: 'pie'|'bar'|'line', categoriesToCompare?: string[], divideByCol?: string) => {
     updateActiveWorkspace(ws => ({
       ...ws,
       chartConfigs: [...ws.chartConfigs, {
-        id: `user-chart-${Date.now()}`, sheetName, categoryCol, valueCol, title: `${valueCol} by ${categoryCol}`, type, categoriesToCompare,
+        id: `user-chart-${Date.now()}`, sheetName, categoryCol, valueCol, divideByCol, title: divideByCol ? `${valueCol} / ${divideByCol} by ${categoryCol}` : `${valueCol} by ${categoryCol}`, type, categoriesToCompare,
         x: 0, y: 100, w: 6, h: 6
       }]
     }));
@@ -339,10 +341,10 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     }));
   };
 
-  const addKpi = (sheetName: string, col: string) => {
+  const addKpi = (sheetName: string, col: string, divideByCol?: string) => {
     updateActiveWorkspace(ws => ({
       ...ws,
-      kpiConfigs: [...ws.kpiConfigs, { id: `user-kpi-${Date.now()}`, sheetName, col, x: 0, y: 100, w: 3, h: 2 }]
+      kpiConfigs: [...ws.kpiConfigs, { id: `user-kpi-${Date.now()}`, sheetName, col, divideByCol, x: 0, y: 100, w: 3, h: 2 }]
     }));
   };
 

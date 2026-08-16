@@ -5,7 +5,7 @@ import _ from 'lodash';
 export async function POST(req: Request) {
     try {
         const body = await req.json();
-        const { datasetId, tableName, groupBy, value, filters, fallbackRecords, type } = body;
+        const { datasetId, tableName, groupBy, value, divideBy, type, filters, fallbackRecords } = body;
 
         // --- Fallback In-Memory Aggregation (If DB isn't connected) ---
         // We use this if the frontend passes fallbackRecords because it knows Supabase is disconnected
@@ -23,22 +23,27 @@ export async function POST(req: Request) {
             }
 
             // 2. Aggregate
-            let aggregated: any[] = [];
             
             if (type === 'kpi') {
-                const total = _.sumBy(filtered, (r: any) => Number(r[value]) || 0);
+                let total = _.sumBy(filtered, (r: any) => Number(r[value]) || 0);
+                if (divideBy) {
+                    const denom = _.sumBy(filtered, (r: any) => Number(r[divideBy]) || 0);
+                    total = denom !== 0 ? total / denom : 0;
+                }
                 return NextResponse.json({ result: total });
             } 
-            else if (groupBy && value) {
+            
+            if (groupBy) {
                 const grouped = _.groupBy(filtered, groupBy);
-                aggregated = Object.keys(grouped).map(key => {
-                    return {
-                        category: key,
-                        value: _.sumBy(grouped[key], (r: any) => Number(r[value]) || 0)
-                    };
-                }).sort((a, b) => b.value - a.value); // sort descending by value
-                
-                return NextResponse.json({ result: aggregated });
+                const result = Object.entries(grouped).map(([category, records]) => {
+                    let sum = _.sumBy(records as any[], (r: any) => Number(r[value]) || 0);
+                    if (divideBy) {
+                        const denom = _.sumBy(records as any[], (r: any) => Number(r[divideBy]) || 0);
+                        sum = denom !== 0 ? sum / denom : 0;
+                    }
+                    return { category, value: sum };
+                }).sort((a, b) => b.value - a.value);
+                return NextResponse.json({ result });
             }
 
             return NextResponse.json({ result: filtered.slice(0, 500) }); // raw records for table

@@ -119,17 +119,19 @@ const KPICard = ({ config, fallbackRecords, filters, onEdit }: { config: KpiConf
       method: 'POST',
       body: JSON.stringify({
         datasetId: 'mock', tableName: config.sheetName,
-        value: config.col, type: 'kpi', filters, fallbackRecords
+        value: config.col, divideBy: config.divideByCol, type: 'kpi', filters, fallbackRecords
       })
     }).then(r => r.json()).then(data => {
       setValue(data.result);
     }).catch(console.error);
   }, [config, filters, fallbackRecords]);
 
-  let label = `Sum of ${config.col}`;
-  const lcol = config.col.toLowerCase();
-  if (lcol.includes('spend')) label = 'Sum YTD Spend';
-  if (lcol.includes('saving')) label = 'Sum YTD Saving';
+  let label = config.divideByCol ? `${config.col} / ${config.divideByCol}` : `Sum of ${config.col}`;
+  if (!config.divideByCol) {
+    const lcol = config.col.toLowerCase();
+    if (lcol.includes('spend')) label = 'Sum YTD Spend';
+    if (lcol.includes('saving')) label = 'Sum YTD Saving';
+  }
 
   return (
     <div onMouseOver={() => setH(true)} onMouseOut={() => setH(false)} style={{
@@ -167,7 +169,7 @@ const GenericChart = ({ config, fallbackRecords, filters, onEdit }: { config: Ch
       method: 'POST',
       body: JSON.stringify({
         datasetId: 'mock', tableName: config.sheetName,
-        groupBy: config.categoryCol, value: config.valueCol, 
+        groupBy: config.categoryCol, value: config.valueCol, divideBy: config.divideByCol,
         filters, fallbackRecords
       })
     }).then(r => r.json()).then(res => {
@@ -216,7 +218,7 @@ const GenericChart = ({ config, fallbackRecords, filters, onEdit }: { config: Ch
         itemStyle: { borderRadius: 2, borderWidth: 1.5, borderColor: '#fff' },
         label: {
           show: true, position: 'outside', fontSize: 10, color: '#5f6368',
-          formatter: (p: any) => `${p.name.length > 12 ? p.name.slice(0, 12) + '…' : p.name} ${((p.value / denominator) * 100).toFixed(0)}%`,
+          formatter: (p: any) => `${p.name.length > 12 ? p.name.slice(0, 12) + '…' : p.name}: ${fmt(p.value)}`,
         },
         labelLine: { length: 8, length2: 6, lineStyle: { color: '#dadce0' } },
         data: chartData
@@ -363,18 +365,20 @@ const KpiModal = ({ onClose, initialConfig }: { onClose: () => void, initialConf
   
   const [sn, setSn] = useState(initialConfig?.sheetName || sheets[0]?.name || '');
   const [col, setCol] = useState(initialConfig?.col || '');
+  const [div, setDiv] = useState(initialConfig?.divideByCol || '');
   const s = sheets.find(x => x.name === sn) || sheets[0];
   
   return (
     <Overlay onClose={onClose}>
       <div style={{ fontWeight: 700, marginBottom: '1rem' }}>Add KPI Card</div>
-      {sheets.length > 1 && <div style={{ marginBottom: 8 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Table</label><select value={sn} onChange={e => { setSn(e.target.value); setCol(''); }} style={selStyle}>{sheets.map(x => <option key={x.name} value={x.name}>{x.name}</option>)}</select></div>}
-      <div style={{ marginBottom: 12 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Value to Sum</label><select value={col} onChange={e => setCol(e.target.value)} style={selStyle}><option value="">Select column...</option>{(s?.numericCols || []).map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+      {sheets.length > 1 && <div style={{ marginBottom: 8 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Table</label><select value={sn} onChange={e => { setSn(e.target.value); setCol(''); setDiv(''); }} style={selStyle}>{sheets.map(x => <option key={x.name} value={x.name}>{x.name}</option>)}</select></div>}
+      <div style={{ marginBottom: 8 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Value to Sum</label><select value={col} onChange={e => setCol(e.target.value)} style={selStyle}><option value="">Select column...</option>{(s?.numericCols || []).map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+      <div style={{ marginBottom: 12 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Divide By (Optional)</label><select value={div} onChange={e => setDiv(e.target.value)} style={selStyle}><option value="">None</option>{(s?.numericCols || []).map(c => <option key={c} value={c}>{c}</option>)}</select></div>
       <div style={{ display: 'flex', gap: 8 }}>
         <button onClick={onClose} style={{ flex: 1, padding: '0.5rem', borderRadius: 6, background: '#f1f3f4', fontWeight: 600, fontSize: '0.8rem', border: '1px solid #e8eaed', cursor: 'pointer' }}>Cancel</button>
         <button disabled={!col} onClick={() => { 
-          if (initialConfig) updateKpi(initialConfig.id, { sheetName: sn, col });
-          else addKpi(sn, col); 
+          if (initialConfig) updateKpi(initialConfig.id, { sheetName: sn, col, divideByCol: div || undefined });
+          else addKpi(sn, col, div || undefined); 
           onClose(); 
         }} style={{ flex: 1, padding: '0.5rem', borderRadius: 6, background: col ? 'var(--primary)' : '#e8eaed', color: col ? 'white' : '#80868b', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', border: 'none' }}>{initialConfig ? 'Save' : 'Add'}</button>
       </div>
@@ -390,6 +394,7 @@ const ChartModal = ({ onClose, initialConfig }: { onClose: () => void, initialCo
   const [sn, setSn] = useState(initialConfig?.sheetName || sheets[0]?.name || '');
   const [cat, setCat] = useState(initialConfig?.categoryCol || '');
   const [val, setVal] = useState(initialConfig?.valueCol || '');
+  const [div, setDiv] = useState(initialConfig?.divideByCol || '');
   const [type, setType] = useState<'pie'|'bar'|'line'>(initialConfig?.type || 'pie');
   const [selectedCats, setSelectedCats] = useState<string[]>(initialConfig?.categoriesToCompare || []);
   const s = sheets.find(x => x.name === sn) || sheets[0];
@@ -402,11 +407,12 @@ const ChartModal = ({ onClose, initialConfig }: { onClose: () => void, initialCo
   return (
     <Overlay onClose={onClose}>
       <div style={{ fontWeight: 700, marginBottom: '1rem' }}>Add Chart</div>
-      {sheets.length > 1 && <div style={{ marginBottom: 8 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Table</label><select value={sn} onChange={e => { setSn(e.target.value); setCat(''); setVal(''); }} style={selStyle}>{sheets.map(x => <option key={x.name} value={x.name}>{x.name}</option>)}</select></div>}
+      {sheets.length > 1 && <div style={{ marginBottom: 8 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Table</label><select value={sn} onChange={e => { setSn(e.target.value); setCat(''); setVal(''); setDiv(''); }} style={selStyle}>{sheets.map(x => <option key={x.name} value={x.name}>{x.name}</option>)}</select></div>}
       <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
         <div style={{ flex: 1 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Group By</label><select value={cat} onChange={e => { setCat(e.target.value); setSelectedCats([]); }} style={selStyle}><option value="">Select...</option>{s && [...(s.categoricalCols||[]), ...(s.dateCols||[])].map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-        <div style={{ flex: 1 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Value</label><select value={val} onChange={e => setVal(e.target.value)} style={selStyle}><option value="">Select...</option>{(s?.numericCols || []).map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+        <div style={{ flex: 1 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Numerator (Value)</label><select value={val} onChange={e => setVal(e.target.value)} style={selStyle}><option value="">Select...</option>{(s?.numericCols || []).map(c => <option key={c} value={c}>{c}</option>)}</select></div>
       </div>
+      <div style={{ marginBottom: 12 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Denominator (Optional Divide By)</label><select value={div} onChange={e => setDiv(e.target.value)} style={selStyle}><option value="">None</option>{(s?.numericCols || []).map(c => <option key={c} value={c}>{c}</option>)}</select></div>
       {availableCategories.length > 0 && (
         <div style={{ marginBottom: 12 }}>
           <label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Categories to Compare (Optional)</label>
@@ -427,11 +433,11 @@ const ChartModal = ({ onClose, initialConfig }: { onClose: () => void, initialCo
       <div style={{ display: 'flex', gap: 8 }}>
         <button onClick={onClose} style={{ flex: 1, padding: '0.5rem', borderRadius: 6, background: '#f1f3f4', fontWeight: 600, fontSize: '0.8rem', border: '1px solid #e8eaed', cursor: 'pointer' }}>Cancel</button>
         <button disabled={!cat || !val} onClick={() => { 
-          const title = `${val} by ${cat}`;
+          const title = div ? `${val} / ${div} by ${cat}` : `${val} by ${cat}`;
           if (initialConfig) {
-            updateChart(initialConfig.id, { sheetName: sn, categoryCol: cat, valueCol: val, title, type, categoriesToCompare: selectedCats.length > 0 ? selectedCats : undefined });
+            updateChart(initialConfig.id, { sheetName: sn, categoryCol: cat, valueCol: val, divideByCol: div || undefined, title, type, categoriesToCompare: selectedCats.length > 0 ? selectedCats : undefined });
           } else {
-            addChart(sn, cat, val, type, selectedCats.length > 0 ? selectedCats : undefined);
+            addChart(sn, cat, val, type, selectedCats.length > 0 ? selectedCats : undefined, div || undefined);
           }
           onClose(); 
         }} style={{ flex: 1, padding: '0.5rem', borderRadius: 6, background: cat && val ? 'var(--primary)' : '#e8eaed', color: cat && val ? 'white' : '#80868b', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', border: 'none' }}>{initialConfig ? 'Save' : 'Add'}</button>
