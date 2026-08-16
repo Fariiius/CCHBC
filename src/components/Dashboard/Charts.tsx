@@ -2,8 +2,8 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import ReactECharts from 'echarts-for-react';
-import { useDashboard, SheetAnalysis, ChartConfig, KpiConfig } from '@/context/DashboardContext';
-import { X, Plus, GripHorizontal } from 'lucide-react';
+import { useDashboard, SheetAnalysis, ChartConfig, KpiConfig, DataRecord } from '@/context/DashboardContext';
+import { X, Plus, GripHorizontal, Edit2, Download } from 'lucide-react';
 import { Responsive, WidthProvider, Layout } from 'react-grid-layout/legacy';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -109,10 +109,10 @@ export const FilterBar = () => {
 
 // ── Components ──────────────────────────────────────────────────────────────
 
-const KPICard = ({ config, fallbackRecords, filters }: { config: KpiConfig, fallbackRecords: any[], filters: any[] }) => {
+const KPICard = ({ config, fallbackRecords, filters, onEdit }: { config: KpiConfig, fallbackRecords: any[], filters: any[], onEdit: () => void }) => {
   const [value, setValue] = useState<number | null>(null);
   const [h, setH] = useState(false);
-  const { removeKpi } = useDashboard();
+  const { removeKpi, openDrillDown, getFilteredRecords } = useDashboard();
 
   useEffect(() => {
     fetch('/api/query', {
@@ -139,12 +139,12 @@ const KPICard = ({ config, fallbackRecords, filters }: { config: KpiConfig, fall
       <div className="drag-handle" style={{ padding: '0.25rem', cursor: 'grab', background: '#f8f9fa', borderBottom: '1px solid #e8eaed', display: 'flex', justifyContent: 'center' }}>
         <GripHorizontal size={12} color="#dadce0" />
       </div>
-      <button onClick={() => removeKpi(config.id)} style={{
-        position: 'absolute', top: 3, right: 3, opacity: h ? 1 : 0, padding: 2,
-        borderRadius: 4, transition: 'opacity 0.1s', color: '#94a3b8', zIndex: 10, background: 'transparent', border: 'none', cursor: 'pointer'
-      }}><X size={12} /></button>
+      <div style={{ position: 'absolute', top: 3, right: 3, opacity: h ? 1 : 0, transition: 'opacity 0.1s', zIndex: 10, display: 'flex', gap: 2 }}>
+        <button onClick={onEdit} style={{ padding: 2, borderRadius: 4, color: '#94a3b8', background: 'transparent', border: 'none', cursor: 'pointer' }}><Edit2 size={12} /></button>
+        <button onClick={() => removeKpi(config.id)} style={{ padding: 2, borderRadius: 4, color: '#94a3b8', background: 'transparent', border: 'none', cursor: 'pointer' }}><X size={12} /></button>
+      </div>
       
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0.5rem' }}>
+      <div onDoubleClick={() => openDrillDown(getFilteredRecords(config.sheetName))} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0.5rem', cursor: 'pointer' }}>
         <div style={{ fontSize: '1.8rem', fontWeight: 800, color: (value !== null && value < 0) ? '#d93025' : 'var(--foreground)', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
           {value !== null ? fmt(value) : '...'}
         </div>
@@ -156,11 +156,11 @@ const KPICard = ({ config, fallbackRecords, filters }: { config: KpiConfig, fall
   );
 };
 
-const GenericChart = ({ config, fallbackRecords, filters }: { config: ChartConfig, fallbackRecords: any[], filters: any[] }) => {
+const GenericChart = ({ config, fallbackRecords, filters, onEdit }: { config: ChartConfig, fallbackRecords: any[], filters: any[], onEdit: () => void }) => {
   const [data, setData] = useState<any[]>([]);
   const [globalTotal, setGlobalTotal] = useState(0);
   const [h, setH] = useState(false);
-  const { removeChart, addCrossFilter } = useDashboard();
+  const { removeChart, addCrossFilter, openDrillDown, getFilteredRecords } = useDashboard();
 
   useEffect(() => {
     fetch('/api/query', {
@@ -191,6 +191,11 @@ const GenericChart = ({ config, fallbackRecords, filters }: { config: ChartConfi
   const onEvents = {
     click: (params: any) => {
       addCrossFilter(config.categoryCol, params.name);
+    },
+    dblclick: (params: any) => {
+      const records = getFilteredRecords(config.sheetName);
+      const sliceRecords = records.filter(r => String(r[config.categoryCol] ?? '') === params.name);
+      openDrillDown(sliceRecords);
     }
   };
 
@@ -238,11 +243,11 @@ const GenericChart = ({ config, fallbackRecords, filters }: { config: ChartConfi
         </div>
         <GripHorizontal size={12} color="#dadce0" />
       </div>
-      <button onClick={() => removeChart(config.id)} style={{
-        position: 'absolute', top: 5, right: 5, opacity: h ? 1 : 0, padding: 2,
-        borderRadius: 4, transition: 'opacity 0.1s', color: '#94a3b8', zIndex: 10, background: 'transparent', border: 'none', cursor: 'pointer'
-      }}><X size={12} /></button>
-      <div style={{ flex: 1, minHeight: 0, padding: '0.5rem' }}>
+      <div style={{ position: 'absolute', top: 5, right: 5, opacity: h ? 1 : 0, transition: 'opacity 0.1s', zIndex: 10, display: 'flex', gap: 4 }}>
+        <button onClick={onEdit} style={{ padding: 2, borderRadius: 4, color: '#94a3b8', background: 'white', border: '1px solid #e8eaed', cursor: 'pointer' }}><Edit2 size={12} /></button>
+        <button onClick={() => removeChart(config.id)} style={{ padding: 2, borderRadius: 4, color: '#94a3b8', background: 'white', border: '1px solid #e8eaed', cursor: 'pointer' }}><X size={12} /></button>
+      </div>
+      <div onDoubleClick={() => openDrillDown(getFilteredRecords(config.sheetName))} style={{ flex: 1, minHeight: 0, padding: '0.5rem', cursor: 'pointer' }}>
         <ReactECharts option={option} onEvents={onEvents} style={{ height: '100%', width: '100%' }} />
       </div>
     </div>
@@ -252,10 +257,11 @@ const GenericChart = ({ config, fallbackRecords, filters }: { config: ChartConfi
 // ── Dashboard View ──────────────────────────────────────────────────────────
 
 export const DashboardView = () => {
-  const { workspaces, activeWorkspaceId, updateChartLayout, updateKpiLayout } = useDashboard();
+  const { workspaces, activeWorkspaceId, updateChartLayout, updateKpiLayout, drillDownData } = useDashboard();
   const ws = workspaces.find(w => w.id === activeWorkspaceId);
-  const [showChartModal, setShowChartModal] = useState(false);
-  const [showKpiModal, setShowKpiModal] = useState(false);
+  const [showChartModal, setShowChartModal] = useState<boolean | ChartConfig>(false);
+  const [showKpiModal, setShowKpiModal] = useState<boolean | KpiConfig>(false);
+  const layoutRef = React.useRef<HTMLDivElement>(null);
 
   if (!ws) return null;
 
@@ -275,13 +281,33 @@ export const DashboardView = () => {
   Object.entries(ws.masterFilters).forEach(([col, vals]) => { if (vals.length) filtersArr.push({ column: col, values: vals }); });
   Object.entries(ws.crossFilters).forEach(([col, vals]) => { if (vals.length) filtersArr.push({ column: col, values: vals }); });
 
+  const exportToPDF = async () => {
+    if (!layoutRef.current) return;
+    try {
+      const html2canvas = (await import('html2canvas')).default;
+      const { jsPDF } = await import('jspdf');
+      
+      const canvas = await html2canvas(layoutRef.current, { scale: 2, useCORS: true });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`Dashboard_${ws.fileName.replace('.xlsx', '')}.pdf`);
+    } catch (e) {
+      console.error('Failed to export PDF', e);
+    }
+  };
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
       <div style={{ display: 'flex', padding: '0.5rem 1rem', background: '#f1f3f4', borderBottom: '1px solid #e8eaed', gap: '0.5rem', justifyContent: 'flex-end' }}>
-         <button onClick={() => setShowKpiModal(true)} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 4, padding: '0.3rem 0.6rem', fontSize: '0.7rem', fontWeight: 600, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}><Plus size={12}/> KPI</button>
+         <button onClick={exportToPDF} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 4, padding: '0.3rem 0.6rem', fontSize: '0.7rem', fontWeight: 600, color: '#5f6368', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}><Download size={12}/> PDF Export</button>
+         <button onClick={() => setShowKpiModal(true)} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 4, padding: '0.3rem 0.6rem', fontSize: '0.7rem', fontWeight: 600, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', marginLeft: 'auto' }}><Plus size={12}/> KPI</button>
          <button onClick={() => setShowChartModal(true)} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 4, padding: '0.3rem 0.6rem', fontSize: '0.7rem', fontWeight: 600, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}><Plus size={12}/> Chart</button>
       </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
+      <div ref={layoutRef} style={{ flex: 1, overflowY: 'auto', padding: '1rem', background: 'var(--background)' }}>
         {/* @ts-ignore */}
         <ResponsiveGridLayout
           className="layout"
@@ -297,7 +323,7 @@ export const DashboardView = () => {
             const sheet = ws.sheets.find(s => s.name === k.sheetName);
             return (
               <div key={k.id}>
-                <KPICard config={k} fallbackRecords={sheet?.records || []} filters={filtersArr} />
+                <KPICard config={k} fallbackRecords={sheet?.records || []} filters={filtersArr} onEdit={() => setShowKpiModal(k)} />
               </div>
             );
           })}
@@ -305,23 +331,24 @@ export const DashboardView = () => {
             const sheet = ws.sheets.find(s => s.name === c.sheetName);
             return (
               <div key={c.id}>
-                <GenericChart config={c} fallbackRecords={sheet?.records || []} filters={filtersArr} />
+                <GenericChart config={c} fallbackRecords={sheet?.records || []} filters={filtersArr} onEdit={() => setShowChartModal(c)} />
               </div>
             );
           })}
         </ResponsiveGridLayout>
       </div>
-      {showKpiModal && <AddKpiModal onClose={() => setShowKpiModal(false)} />}
-      {showChartModal && <AddChartModal onClose={() => setShowChartModal(false)} />}
+      {showKpiModal && <KpiModal initialConfig={typeof showKpiModal === 'object' ? showKpiModal : undefined} onClose={() => setShowKpiModal(false)} />}
+      {showChartModal && <ChartModal initialConfig={typeof showChartModal === 'object' ? showChartModal : undefined} onClose={() => setShowChartModal(false)} />}
+      {drillDownData && <DrillDownModal />}
     </div>
   );
 };
 
 // ── Modals ──────────────────────────────────────────────────────────────────
 
-const Overlay = ({ children, onClose }: { children: React.ReactNode; onClose: () => void }) => (
+const Overlay = ({ children, onClose, width = 340 }: { children: React.ReactNode; onClose: () => void; width?: number | string }) => (
   <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }} onClick={onClose}>
-    <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 10, padding: '1.5rem', width: 340, boxShadow: '0 16px 48px rgba(0,0,0,0.12)' }}>
+    <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 10, padding: '1.5rem', width, maxWidth: '95vw', maxHeight: '95vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 16px 48px rgba(0,0,0,0.12)' }}>
       {children}
     </div>
   </div>
@@ -329,13 +356,13 @@ const Overlay = ({ children, onClose }: { children: React.ReactNode; onClose: ()
 
 const selStyle: React.CSSProperties = { width: '100%', padding: '0.5rem', background: '#f8f9fa', border: '1px solid #e8eaed', borderRadius: 6, fontSize: '0.8rem', outline: 'none', color: '#202124' };
 
-const AddKpiModal = ({ onClose }: { onClose: () => void }) => {
-  const { workspaces, activeWorkspaceId, addKpi } = useDashboard();
+const KpiModal = ({ onClose, initialConfig }: { onClose: () => void, initialConfig?: KpiConfig }) => {
+  const { workspaces, activeWorkspaceId, addKpi, updateKpi } = useDashboard();
   const ws = workspaces.find(w => w.id === activeWorkspaceId);
   const sheets = ws?.sheets || [];
   
-  const [sn, setSn] = useState(sheets[0]?.name || '');
-  const [col, setCol] = useState('');
+  const [sn, setSn] = useState(initialConfig?.sheetName || sheets[0]?.name || '');
+  const [col, setCol] = useState(initialConfig?.col || '');
   const s = sheets.find(x => x.name === sn) || sheets[0];
   
   return (
@@ -345,22 +372,26 @@ const AddKpiModal = ({ onClose }: { onClose: () => void }) => {
       <div style={{ marginBottom: 12 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Value to Sum</label><select value={col} onChange={e => setCol(e.target.value)} style={selStyle}><option value="">Select column...</option>{s?.numericCols.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
       <div style={{ display: 'flex', gap: 8 }}>
         <button onClick={onClose} style={{ flex: 1, padding: '0.5rem', borderRadius: 6, background: '#f1f3f4', fontWeight: 600, fontSize: '0.8rem', border: '1px solid #e8eaed', cursor: 'pointer' }}>Cancel</button>
-        <button disabled={!col} onClick={() => { addKpi(sn, col); onClose(); }} style={{ flex: 1, padding: '0.5rem', borderRadius: 6, background: col ? 'var(--primary)' : '#e8eaed', color: col ? 'white' : '#80868b', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', border: 'none' }}>Add</button>
+        <button disabled={!col} onClick={() => { 
+          if (initialConfig) updateKpi(initialConfig.id, { sheetName: sn, col });
+          else addKpi(sn, col); 
+          onClose(); 
+        }} style={{ flex: 1, padding: '0.5rem', borderRadius: 6, background: col ? 'var(--primary)' : '#e8eaed', color: col ? 'white' : '#80868b', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', border: 'none' }}>{initialConfig ? 'Save' : 'Add'}</button>
       </div>
     </Overlay>
   );
 };
 
-const AddChartModal = ({ onClose }: { onClose: () => void }) => {
-  const { workspaces, activeWorkspaceId, addChart } = useDashboard();
+const ChartModal = ({ onClose, initialConfig }: { onClose: () => void, initialConfig?: ChartConfig }) => {
+  const { workspaces, activeWorkspaceId, addChart, updateChart } = useDashboard();
   const ws = workspaces.find(w => w.id === activeWorkspaceId);
   const sheets = ws?.sheets || [];
 
-  const [sn, setSn] = useState(sheets[0]?.name || '');
-  const [cat, setCat] = useState('');
-  const [val, setVal] = useState('');
-  const [type, setType] = useState<'pie'|'bar'|'line'>('pie');
-  const [selectedCats, setSelectedCats] = useState<string[]>([]);
+  const [sn, setSn] = useState(initialConfig?.sheetName || sheets[0]?.name || '');
+  const [cat, setCat] = useState(initialConfig?.categoryCol || '');
+  const [val, setVal] = useState(initialConfig?.valueCol || '');
+  const [type, setType] = useState<'pie'|'bar'|'line'>(initialConfig?.type || 'pie');
+  const [selectedCats, setSelectedCats] = useState<string[]>(initialConfig?.categoriesToCompare || []);
   const s = sheets.find(x => x.name === sn) || sheets[0];
 
   const availableCategories = useMemo(() => {
@@ -395,7 +426,84 @@ const AddChartModal = ({ onClose }: { onClose: () => void }) => {
       <div style={{ marginBottom: 12 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Chart Type</label><select value={type} onChange={e => setType(e.target.value as any)} style={selStyle}><option value="pie">Pie Chart</option><option value="bar">Bar (Column) Chart</option><option value="line">Line Chart</option></select></div>
       <div style={{ display: 'flex', gap: 8 }}>
         <button onClick={onClose} style={{ flex: 1, padding: '0.5rem', borderRadius: 6, background: '#f1f3f4', fontWeight: 600, fontSize: '0.8rem', border: '1px solid #e8eaed', cursor: 'pointer' }}>Cancel</button>
-        <button disabled={!cat || !val} onClick={() => { addChart(sn, cat, val, type, selectedCats.length > 0 ? selectedCats : undefined); onClose(); }} style={{ flex: 1, padding: '0.5rem', borderRadius: 6, background: cat && val ? 'var(--primary)' : '#e8eaed', color: cat && val ? 'white' : '#80868b', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', border: 'none' }}>Add</button>
+        <button disabled={!cat || !val} onClick={() => { 
+          const title = `${val} by ${cat}`;
+          if (initialConfig) {
+            updateChart(initialConfig.id, { sheetName: sn, categoryCol: cat, valueCol: val, title, type, categoriesToCompare: selectedCats.length > 0 ? selectedCats : undefined });
+          } else {
+            addChart(sn, cat, val, type, selectedCats.length > 0 ? selectedCats : undefined);
+          }
+          onClose(); 
+        }} style={{ flex: 1, padding: '0.5rem', borderRadius: 6, background: cat && val ? 'var(--primary)' : '#e8eaed', color: cat && val ? 'white' : '#80868b', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', border: 'none' }}>{initialConfig ? 'Save' : 'Add'}</button>
+      </div>
+    </Overlay>
+  );
+};
+
+export const DrillDownModal = () => {
+  const { drillDownData, closeDrillDown } = useDashboard();
+  
+  if (!drillDownData || drillDownData.length === 0) {
+    return (
+      <Overlay onClose={closeDrillDown} width={400}>
+        <div style={{ padding: '1rem', textAlign: 'center' }}>
+          <h3>No Data</h3>
+          <p style={{ color: '#5f6368' }}>There are no raw records matching this selection.</p>
+          <button onClick={closeDrillDown} style={{ marginTop: '1rem', padding: '0.5rem 1rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Close</button>
+        </div>
+      </Overlay>
+    );
+  }
+
+  const columns = Object.keys(drillDownData[0]).slice(0, 15); // limit columns for display
+
+  const exportCSV = () => {
+    const csvRows = [];
+    const headers = Object.keys(drillDownData[0]);
+    csvRows.push(headers.join(','));
+    for (const row of drillDownData) {
+      csvRows.push(headers.map(h => {
+        const val = row[h];
+        return (typeof val === 'string' && val.includes(',')) ? `"${val}"` : val;
+      }).join(','));
+    }
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'drilldown_data.csv';
+    a.click();
+  };
+
+  return (
+    <Overlay onClose={closeDrillDown} width="80vw">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexShrink: 0 }}>
+        <h3 style={{ margin: 0 }}>Data Drill Down <span style={{ fontSize: '0.8rem', color: '#5f6368', fontWeight: 'normal' }}>({drillDownData.length} records)</span></h3>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button onClick={exportCSV} style={{ padding: '0.4rem 0.8rem', background: 'white', border: '1px solid #dadce0', borderRadius: 4, fontSize: '0.75rem', fontWeight: 600, color: '#5f6368', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}><Download size={12}/> Export CSV</button>
+          <button onClick={closeDrillDown} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}><X size={20} color="#5f6368" /></button>
+        </div>
+      </div>
+      <div style={{ flex: 1, overflow: 'auto', border: '1px solid #e8eaed', borderRadius: 4 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', textAlign: 'left' }}>
+          <thead style={{ background: '#f8f9fa', position: 'sticky', top: 0, zIndex: 10 }}>
+            <tr>
+              {columns.map(c => <th key={c} style={{ padding: '0.5rem', borderBottom: '1px solid #e8eaed', fontWeight: 600, color: '#3c4043' }}>{c}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {drillDownData.slice(0, 100).map((row, i) => (
+              <tr key={i} style={{ borderBottom: '1px solid #f1f3f4' }}>
+                {columns.map(c => <td key={c} style={{ padding: '0.5rem', color: '#5f6368', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{String(row[c] ?? '')}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {drillDownData.length > 100 && (
+          <div style={{ padding: '0.5rem', textAlign: 'center', color: '#5f6368', background: '#f8f9fa', fontSize: '0.75rem' }}>
+            Showing top 100 records. Export to CSV to see all.
+          </div>
+        )}
       </div>
     </Overlay>
   );

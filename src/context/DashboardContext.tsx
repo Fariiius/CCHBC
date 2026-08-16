@@ -72,6 +72,13 @@ interface DashboardContextProps {
   removeKpi: (id: string) => void;
   updateKpiLayout: (id: string, layout: {x: number, y: number, w: number, h: number}) => void;
   getFilteredRecords: (sheetName: string) => DataRecord[];
+  
+  // Phase 3
+  drillDownData: DataRecord[] | null;
+  openDrillDown: (data: DataRecord[]) => void;
+  closeDrillDown: () => void;
+  updateChart: (id: string, config: Partial<ChartConfig>) => void;
+  updateKpi: (id: string, config: Partial<KpiConfig>) => void;
 }
 
 const DashboardContext = createContext<DashboardContextProps | undefined>(undefined);
@@ -87,6 +94,30 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
   const [error, setError] = useState<string | null>(null);
 
   const [stagingWorkspace, setStagingWorkspace] = useState<any | null>(null);
+  const [drillDownData, setDrillDownData] = useState<DataRecord[] | null>(null);
+
+  // Load from LocalStorage on mount
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem('cchbc_workspaces');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setWorkspaces(parsed);
+          setActiveWorkspaceId(parsed[parsed.length - 1].id);
+        }
+      }
+    } catch (e) { console.error('Failed to load workspaces from local storage', e); }
+  }, []);
+
+  // Save to LocalStorage whenever workspaces change
+  React.useEffect(() => {
+    if (workspaces.length > 0) {
+      localStorage.setItem('cchbc_workspaces', JSON.stringify(workspaces));
+    } else {
+      localStorage.removeItem('cchbc_workspaces');
+    }
+  }, [workspaces]);
 
   const handleFileUpload = async (file: File, isUpdateForId?: string) => {
     setLoading(true);
@@ -329,6 +360,23 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     }));
   };
 
+  const updateChart = (id: string, config: Partial<ChartConfig>) => {
+    updateActiveWorkspace(ws => ({
+      ...ws,
+      chartConfigs: ws.chartConfigs.map(c => c.id === id ? { ...c, ...config } : c)
+    }));
+  };
+
+  const updateKpi = (id: string, config: Partial<KpiConfig>) => {
+    updateActiveWorkspace(ws => ({
+      ...ws,
+      kpiConfigs: ws.kpiConfigs.map(k => k.id === id ? { ...k, ...config } : k)
+    }));
+  };
+
+  const openDrillDown = (data: DataRecord[]) => setDrillDownData(data);
+  const closeDrillDown = () => setDrillDownData(null);
+
   const getFilteredRecords = (sheetName: string): DataRecord[] => {
     const ws = workspaces.find(w => w.id === activeWorkspaceId);
     if (!ws) return [];
@@ -359,9 +407,10 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
       stagingWorkspace, confirmStaging, cancelStaging,
       toggleFilter, resetFilters, 
       addCrossFilter, removeCrossFilter, clearCrossFilters,
-      addChart, removeChart, updateChartLayout, 
-      addKpi, removeKpi, updateKpiLayout, 
-      getFilteredRecords
+      addChart, removeChart, updateChartLayout, updateChart,
+      addKpi, removeKpi, updateKpiLayout, updateKpi,
+      getFilteredRecords,
+      drillDownData, openDrillDown, closeDrillDown
     }}>
       {children}
     </DashboardContext.Provider>
