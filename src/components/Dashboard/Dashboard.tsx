@@ -3,7 +3,9 @@
 import React from 'react';
 import { useDashboard } from '@/context/DashboardContext';
 import { Header } from '@/components/Header/Header';
-import { DashboardView, FilterBar } from '@/components/Dashboard/Charts';
+import dynamic from 'next/dynamic';
+const DashboardView = dynamic(() => import('@/components/Dashboard/Charts').then(mod => mod.DashboardView), { ssr: false });
+const FilterBar = dynamic(() => import('@/components/Dashboard/Charts').then(mod => mod.FilterBar), { ssr: false });
 import { UploadZone } from '@/components/Upload/UploadZone';
 import { Loader2 } from 'lucide-react';
 
