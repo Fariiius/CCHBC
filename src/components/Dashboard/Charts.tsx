@@ -4,7 +4,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { useDashboard, SheetAnalysis, ChartConfig, KpiConfig } from '@/context/DashboardContext';
 import { X, Plus, GripHorizontal } from 'lucide-react';
-import { Responsive, WidthProvider, Layout } from 'react-grid-layout';
+import { Responsive, WidthProvider, Layout } from 'react-grid-layout/legacy';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 
