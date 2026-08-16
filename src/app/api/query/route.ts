@@ -5,7 +5,7 @@ import _ from 'lodash';
 export async function POST(req: Request) {
     try {
         const body = await req.json();
-        const { datasetId, tableName, groupBy, value, divideBy, type, filters, fallbackRecords } = body;
+        const { datasetId, tableName, groupBy, value, calcCol, calcOp, type, filters, fallbackRecords } = body;
 
         // --- Fallback In-Memory Aggregation (If DB isn't connected) ---
         // We use this if the frontend passes fallbackRecords because it knows Supabase is disconnected
@@ -26,9 +26,12 @@ export async function POST(req: Request) {
             
             if (type === 'kpi') {
                 let total = _.sumBy(filtered, (r: any) => Number(r[value]) || 0);
-                if (divideBy) {
-                    const denom = _.sumBy(filtered, (r: any) => Number(r[divideBy]) || 0);
-                    total = denom !== 0 ? total / denom : 0;
+                if (calcCol && calcOp) {
+                    const valB = _.sumBy(filtered, (r: any) => Number(r[calcCol]) || 0);
+                    if (calcOp === '+') total = total + valB;
+                    else if (calcOp === '-') total = total - valB;
+                    else if (calcOp === '*') total = total * valB;
+                    else if (calcOp === '/') total = valB !== 0 ? total / valB : 0;
                 }
                 return NextResponse.json({ result: total });
             } 
@@ -37,9 +40,12 @@ export async function POST(req: Request) {
                 const grouped = _.groupBy(filtered, groupBy);
                 const result = Object.entries(grouped).map(([category, records]) => {
                     let sum = _.sumBy(records as any[], (r: any) => Number(r[value]) || 0);
-                    if (divideBy) {
-                        const denom = _.sumBy(records as any[], (r: any) => Number(r[divideBy]) || 0);
-                        sum = denom !== 0 ? sum / denom : 0;
+                    if (calcCol && calcOp) {
+                        const valB = _.sumBy(records as any[], (r: any) => Number(r[calcCol]) || 0);
+                        if (calcOp === '+') sum = sum + valB;
+                        else if (calcOp === '-') sum = sum - valB;
+                        else if (calcOp === '*') sum = sum * valB;
+                        else if (calcOp === '/') sum = valB !== 0 ? sum / valB : 0;
                     }
                     return { category, value: sum };
                 }).sort((a, b) => b.value - a.value);
