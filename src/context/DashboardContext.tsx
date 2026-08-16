@@ -6,13 +6,17 @@ import React, { createContext, useContext, useState, ReactNode } from 'react';
 export type DataRecord = Record<string, any>;
 
 export interface SheetAnalysis {
+  id: string;
   name: string;
-  records: DataRecord[];
-  numericCols: string[];
+  tableName: string;
   categoricalCols: string[];
+  numericCols: string[];
   dateCols: string[];
-  allCols: string[];
-  rowCount: number;
+  records: any[];
+  totalRows: number;
+  headerRowIdx?: number;
+  rawPreview?: any[][];
+  columns?: { name: string, type: string }[];
   isEmpty: boolean;
 }
 
@@ -53,13 +57,18 @@ interface DashboardContextProps {
   activeWorkspaceId: string | null;
   loading: boolean;
   error: string | null;
+  stagedFile: File | null;
+  stagingWorkspace: {
+    datasetId?: string;
+    analyzed: SheetAnalysis[];
+  } | null;
   
   // Workspace Management
   switchWorkspace: (id: string) => void;
   closeWorkspace: (id: string) => void;
-  handleFileUpload: (file: File, isUpdateForId?: string) => Promise<void>;
+  handleFileUpload: (file: File, headerMapping?: Record<string, number>) => Promise<void>;
+  updateStagedColumnType: (sheetName: string, colName: string, newType: string) => void;
   resetDashboard: () => void;
-  stagingWorkspace: any | null;
   confirmStaging: (relationships?: any) => void;
   cancelStaging: () => void;
 
@@ -96,8 +105,9 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stagedFile, setStagedFile] = useState<File | null>(null);
 
-  const [stagingWorkspace, setStagingWorkspace] = useState<any | null>(null);
+  const [stagingWorkspace, setStagingWorkspace] = useState<{datasetId?: string; analyzed: SheetAnalysis[]} | null>(null);
   const [drillDownData, setDrillDownData] = useState<DataRecord[] | null>(null);
 
   // Load from LocalStorage on mount
@@ -123,12 +133,16 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [workspaces]);
 
-  const handleFileUpload = async (file: File, isUpdateForId?: string) => {
+  const handleFileUpload = async (file: File, headerMapping?: Record<string, number>) => {
     setLoading(true);
     setError(null);
+    if (!headerMapping) setStagedFile(file);
     try {
       const formData = new FormData();
       formData.append('file', file);
+      if (headerMapping) {
+        formData.append('headerMapping', JSON.stringify(headerMapping));
+      }
       
       const res = await fetch('/api/upload', {
         method: 'POST',
@@ -143,31 +157,46 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
         const numericCols = s.columns.filter((c:any) => c.type === 'numeric').map((c:any) => c.name);
         const dateCols = s.columns.filter((c:any) => c.type === 'date').map((c:any) => c.name);
         const categoricalCols = s.columns.filter((c:any) => c.type === 'text').map((c:any) => c.name);
-        const allCols = s.columns.map((c:any) => c.name);
 
         return {
+          id: s.id,
           name: s.sheetName,
-          records: s.records, // Note: This is now a preview (100 rows) due to the API logic, full fetch happens on demand later
-          numericCols, categoricalCols, dateCols, allCols,
-          rowCount: s.totalRows,
+          tableName: s.tableName,
+          categoricalCols,
+          numericCols,
+          dateCols,
+          records: s.records,
+          totalRows: s.totalRows,
+          headerRowIdx: s.headerRowIdx,
+          rawPreview: s.rawPreview,
+          columns: s.columns,
           isEmpty: s.totalRows === 0
         };
       });
 
-      // Instead of instantly adding it, we stage it for the relationship UI
-      setStagingWorkspace({
-        file,
-        fileName: file.name,
-        isUpdateForId,
-        datasetId: data.datasetId,
-        analyzed
-      });
+      setStagingWorkspace({ datasetId: data.datasetId, analyzed });
 
     } catch (err: any) {
       setError(err.message || 'Failed to process file.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const updateStagedColumnType = (sheetName: string, colName: string, newType: string) => {
+    if (!stagingWorkspace) return;
+    setStagingWorkspace(prev => {
+      if (!prev) return prev;
+      const analyzed = prev.analyzed.map(s => {
+        if (s.name !== sheetName || !s.columns) return s;
+        const columns = s.columns.map(c => c.name === colName ? { ...c, type: newType } : c);
+        const categoricalCols = columns.filter(c => c.type === 'text').map(c => c.name);
+        const numericCols = columns.filter(c => c.type === 'numeric').map(c => c.name);
+        const dateCols = columns.filter(c => c.type === 'date').map(c => c.name);
+        return { ...s, columns, categoricalCols, numericCols, dateCols };
+      });
+      return { ...prev, analyzed };
+    });
   };
 
   const confirmStaging = (relationships?: any) => {
@@ -239,26 +268,22 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     }
 
     setWorkspaces(prev => {
-      if (stagingWorkspace.isUpdateForId) {
-        return prev.map(w => w.id === stagingWorkspace.isUpdateForId ? {
-          ...w, fileName: stagingWorkspace.fileName, sheets: analyzed
-        } : w);
-      } else {
         const newId = `ws-${Date.now()}`;
         const newWs: Workspace = {
-          id: newId, fileName: stagingWorkspace.fileName, sheets: analyzed,
+          id: newId, fileName: stagedFile?.name || 'Uploaded File', sheets: analyzed,
           chartConfigs: topCharts, kpiConfigs: topKpis, masterFilters: {}, crossFilters: {}
         };
         setActiveWorkspaceId(newId);
         return [...prev, newWs];
-      }
     });
 
     setStagingWorkspace(null);
+    setStagedFile(null);
   };
 
   const cancelStaging = () => {
     setStagingWorkspace(null);
+    setStagedFile(null);
   };
 
   const switchWorkspace = (id: string) => setActiveWorkspaceId(id);
@@ -406,9 +431,9 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <DashboardContext.Provider value={{
-      workspaces, activeWorkspaceId, loading, error,
-      switchWorkspace, closeWorkspace, handleFileUpload, resetDashboard,
-      stagingWorkspace, confirmStaging, cancelStaging,
+      workspaces, activeWorkspaceId, loading, error, stagedFile, stagingWorkspace,
+      switchWorkspace, closeWorkspace, handleFileUpload, updateStagedColumnType, resetDashboard,
+      confirmStaging, cancelStaging,
       toggleFilter, resetFilters, 
       addCrossFilter, removeCrossFilter, clearCrossFilters,
       addChart, removeChart, updateChartLayout, updateChart,

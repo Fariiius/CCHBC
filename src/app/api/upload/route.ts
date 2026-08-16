@@ -28,6 +28,12 @@ export async function POST(req: Request) {
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File;
+    const headerMappingStr = formData.get('headerMapping') as string;
+    let headerMapping: Record<string, number> = {};
+    if (headerMappingStr) {
+      try { headerMapping = JSON.parse(headerMappingStr); } catch(e) {}
+    }
+
     if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
 
     const buffer = await file.arrayBuffer();
@@ -53,16 +59,23 @@ export async function POST(req: Request) {
       const ws = wb.Sheets[sheetName];
       const rawArray = xlsx.utils.sheet_to_json(ws, { header: 1 }) as any[][];
       
-      // Find the first row that has some data to act as headers
       let headerRowIdx = 0;
       let maxStrings = 0;
-      for (let i = 0; i < Math.min(rawArray.length, 20); i++) {
-        const row = rawArray[i];
-        if (!row || !Array.isArray(row)) continue;
-        const stringCount = row.filter(val => typeof val === 'string' && val.trim() !== '').length;
-        if (stringCount > maxStrings) {
-          maxStrings = stringCount;
-          headerRowIdx = i;
+
+      // If header mapping is provided by the user, use it
+      if (headerMapping[sheetName] !== undefined) {
+        headerRowIdx = headerMapping[sheetName];
+        maxStrings = 1; // force bypass auto-detect
+      } else {
+        // Find the first row that has some data to act as headers
+        for (let i = 0; i < Math.min(rawArray.length, 20); i++) {
+          const row = rawArray[i];
+          if (!row || !Array.isArray(row)) continue;
+          const stringCount = row.filter(val => typeof val === 'string' && val.trim() !== '').length;
+          if (stringCount > maxStrings) {
+            maxStrings = stringCount;
+            headerRowIdx = i;
+          }
         }
       }
 
@@ -212,7 +225,9 @@ export async function POST(req: Request) {
             tableName: dynamicTableName,
             columns,
             records: records.slice(0, 100), // Only return preview to frontend
-            totalRows: records.length
+            totalRows: records.length,
+            headerRowIdx,
+            rawPreview: rawArray.slice(0, 20)
           });
 
       } catch (dbError) {
@@ -224,7 +239,9 @@ export async function POST(req: Request) {
             tableName: dynamicTableName,
             columns,
             records: records.slice(0, 100),
-            totalRows: records.length
+            totalRows: records.length,
+            headerRowIdx,
+            rawPreview: rawArray.slice(0, 20)
           });
       }
     }

@@ -10,7 +10,15 @@ import { UploadZone } from '@/components/Upload/UploadZone';
 import { Loader2 } from 'lucide-react';
 
 export const Dashboard = () => {
-  const { loading, error, workspaces, activeWorkspaceId, resetDashboard, stagingWorkspace, confirmStaging, cancelStaging } = useDashboard();
+  const { loading, error, workspaces, activeWorkspaceId, resetDashboard, stagingWorkspace, stagedFile, handleFileUpload, updateStagedColumnType, confirmStaging, cancelStaging } = useDashboard();
+  const [activeTab, setActiveTab] = React.useState('');
+  const [headerMapping, setHeaderMapping] = React.useState<Record<string, number>>({});
+
+  React.useEffect(() => {
+    if (stagingWorkspace?.analyzed?.length && !activeTab) {
+      setActiveTab(stagingWorkspace.analyzed[0].name);
+    }
+  }, [stagingWorkspace, activeTab]);
 
   if (loading && workspaces.length === 0) {
     return (
@@ -40,41 +48,74 @@ export const Dashboard = () => {
   if (workspaces.length === 0 && !stagingWorkspace) return <UploadZone />;
 
   if (stagingWorkspace) {
+    const sheet = stagingWorkspace.analyzed.find(s => s.name === activeTab) || stagingWorkspace.analyzed[0];
     return (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--background)' }}>
         <Header />
         <div style={{ padding: '2rem', background: 'var(--background)', flex: 1, overflowY: 'auto' }}>
-          <div style={{ maxWidth: 800, margin: '0 auto', background: 'var(--surface)', borderRadius: 8, padding: '2rem', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-            <h2 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>Review Import: {stagingWorkspace.fileName}</h2>
-            <p style={{ color: '#5f6368', marginBottom: '2rem' }}>We've analyzed your file. Review the detected tables and columns before finalizing the import.</p>
+          <div style={{ maxWidth: 1000, margin: '0 auto', background: 'var(--surface)', borderRadius: 8, padding: '2rem', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>Data Prep Wizard</h2>
+            <p style={{ color: '#5f6368', marginBottom: '1.5rem' }}>Review your data, select the correct header row, and map your columns before importing.</p>
             
-            {stagingWorkspace.analyzed.map((sheet: any) => (
-              <div key={sheet.name} style={{ marginBottom: '1.5rem', border: '1px solid #e8eaed', borderRadius: 8, overflow: 'hidden' }}>
-                <div style={{ background: '#f8f9fa', padding: '0.75rem 1rem', fontWeight: 700, borderBottom: '1px solid #e8eaed', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>{sheet.name}</span>
-                  <span style={{ fontSize: '0.75rem', color: '#5f6368', fontWeight: 500 }}>{sheet.rowCount} rows</span>
+            <div style={{ display: 'flex', borderBottom: '1px solid #e8eaed', marginBottom: '1rem' }}>
+              {stagingWorkspace.analyzed.map(s => (
+                <div key={s.name} onClick={() => setActiveTab(s.name)} style={{ padding: '0.5rem 1rem', cursor: 'pointer', borderBottom: activeTab === s.name ? '2px solid var(--primary)' : '2px solid transparent', fontWeight: activeTab === s.name ? 700 : 500, color: activeTab === s.name ? 'var(--primary)' : '#5f6368' }}>
+                  {s.name} ({s.totalRows} rows)
                 </div>
-                <div style={{ padding: '1rem' }}>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                    {sheet.allCols.map((col: string) => {
-                      let type = 'text';
-                      if (sheet.numericCols.includes(col)) type = 'numeric';
-                      if (sheet.dateCols.includes(col)) type = 'date';
-                      return (
-                        <div key={col} style={{ background: '#f1f3f4', padding: '0.25rem 0.5rem', borderRadius: 4, fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                          <span style={{ fontWeight: 600 }}>{col}</span>
-                          <span style={{ color: '#80868b', fontSize: '0.65rem', textTransform: 'uppercase' }}>{type}</span>
-                        </div>
-                      );
-                    })}
+              ))}
+            </div>
+
+            {sheet && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                <div>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.5rem' }}>1. Select Header Row</h3>
+                  <p style={{ color: '#5f6368', fontSize: '0.8rem', marginBottom: '0.5rem' }}>If your Excel file has weird formatting or garbage at the top, click "Set as Header" on the row that contains your actual column names.</p>
+                  <div style={{ border: '1px solid #e8eaed', borderRadius: 8, overflowX: 'auto', maxHeight: 300 }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', textAlign: 'left', whiteSpace: 'nowrap' }}>
+                      <tbody>
+                        {sheet.rawPreview?.map((row, idx) => (
+                          <tr key={idx} style={{ background: sheet.headerRowIdx === idx ? '#e8f0fe' : idx % 2 === 0 ? 'white' : '#f8f9fa', borderBottom: '1px solid #e8eaed' }}>
+                            <td style={{ padding: '0.5rem', borderRight: '1px solid #e8eaed', width: 120 }}>
+                              {sheet.headerRowIdx === idx ? (
+                                <span style={{ color: 'var(--primary)', fontWeight: 700 }}>Current Header</span>
+                              ) : (
+                                <button onClick={() => {
+                                  const newMapping = { ...headerMapping, [sheet.name]: idx };
+                                  setHeaderMapping(newMapping);
+                                  handleFileUpload(stagedFile!, newMapping);
+                                }} style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem', cursor: 'pointer', borderRadius: 4, border: '1px solid #dadce0', background: 'white', color: '#5f6368' }}>Set as Header</button>
+                              )}
+                            </td>
+                            {row.map((cell, cIdx) => <td key={cIdx} style={{ padding: '0.5rem', color: sheet.headerRowIdx === idx ? 'var(--primary)' : '#3c4043', fontWeight: sheet.headerRowIdx === idx ? 700 : 400 }}>{String(cell ?? '')}</td>)}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.5rem' }}>2. Map Columns</h3>
+                  <p style={{ color: '#5f6368', fontSize: '0.8rem', marginBottom: '0.5rem' }}>Ensure each column is treated correctly as a Group (Text) or a Value (Number).</p>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', background: '#f8f9fa', padding: '1rem', borderRadius: 8, border: '1px solid #e8eaed' }}>
+                    {sheet.columns?.map(col => (
+                      <div key={col.name} style={{ background: 'white', padding: '0.5rem', borderRadius: 6, border: '1px solid #dadce0', display: 'flex', flexDirection: 'column', gap: '0.25rem', width: 180 }}>
+                        <span style={{ fontWeight: 600, fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={col.name}>{col.name}</span>
+                        <select value={col.type} onChange={e => updateStagedColumnType(sheet.name, col.name, e.target.value)} style={{ padding: '0.25rem', fontSize: '0.75rem', borderRadius: 4, border: '1px solid #e8eaed', outline: 'none' }}>
+                          <option value="text">Group (Text)</option>
+                          <option value="numeric">Value (Number)</option>
+                          <option value="date">Date</option>
+                        </select>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
-            ))}
+            )}
 
-            <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem', justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem', justifyContent: 'flex-end', borderTop: '1px solid #e8eaed', paddingTop: '1.5rem' }}>
               <button onClick={cancelStaging} style={{ padding: '0.5rem 1rem', borderRadius: 6, fontWeight: 600, color: '#5f6368', background: '#f1f3f4', border: 'none', cursor: 'pointer' }}>Cancel</button>
-              <button onClick={() => confirmStaging()} style={{ padding: '0.5rem 1.5rem', borderRadius: 6, fontWeight: 600, color: 'white', background: 'var(--primary)', border: 'none', cursor: 'pointer' }}>Confirm & Import</button>
+              <button onClick={() => confirmStaging()} style={{ padding: '0.5rem 1.5rem', borderRadius: 6, fontWeight: 600, color: 'white', background: 'var(--primary)', border: 'none', cursor: 'pointer' }}>Confirm & Build Dashboard</button>
             </div>
           </div>
         </div>
