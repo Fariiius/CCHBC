@@ -10,7 +10,7 @@ import 'react-resizable/css/styles.css';
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
-const COLORS = ['#1a73e8','#e53935','#34a853','#fbbc04','#8e24aa','#00bcd4','#ff7043','#607d8b','#43a047','#e91e63','#ff9800','#795548','#3f51b5','#009688','#8bc34a'];
+const COLORS = ['#F40009', '#111111', '#555555', '#999999', '#D90008', '#B00006', '#E5E7EB', '#374151', '#9CA3AF', '#FCA5A5'];
 
 const fmt = (v: number, isPercent = false): string => {
   if (v === null || v === undefined || isNaN(v)) return '-';

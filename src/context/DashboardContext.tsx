@@ -29,6 +29,7 @@ export interface SheetPrepConfig {
   excludedCols: string[];
   columnTypes: Record<string, 'text'|'numeric'|'date'>;
   rawPreview: any[][];
+  initialCharts?: { catCol: string, valCol: string, type: 'pie'|'bar'|'line' }[];
 }
 
 export interface ChartSeries {
@@ -176,7 +177,8 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
          excludedRows: [],
          excludedCols: [],
          columnTypes: {},
-         rawPreview: s.rawPreview
+         rawPreview: s.rawPreview,
+         initialCharts: []
       }));
       setStagingWorkspace({ configs });
     } catch (err: any) {
@@ -302,7 +304,24 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
 
       const topCharts: ChartConfig[] = [];
       const seenCombos = new Set<string>();
-      const colors = ['#1a73e8', '#e53935', '#34a853', '#fbbc04', '#8e24aa'];
+      const colors = ['#F40009', '#111111', '#555555', '#999999', '#D90008'];
+      
+      // 1. Add user pre-configured charts from Data Prep phase
+      stagingWorkspace.configs.forEach(config => {
+        if (config.initialCharts) {
+           config.initialCharts.forEach(ic => {
+             topCharts.push({
+               id: `auto-chart-${Date.now()}-${topCharts.length}`,
+               categoryCol: ic.catCol,
+               title: `${ic.valCol} by ${ic.catCol}`, 
+               type: ic.type,
+               series: [{ id: `series-${Date.now()}`, sheetName: config.id, valueCol: ic.valCol, color: colors[0] }],
+               x: (topCharts.length % 2) * 6, y: 2 + Math.floor(topCharts.length / 2) * 6, w: 6, h: 6
+             });
+             seenCombos.add(`${ic.catCol}-${ic.valCol}`);
+           });
+        }
+      });
       
       for (const c of allChartCands) {
         if (!seenCombos.has(`${c.cat}-${c.val}`) && topCharts.length < 5) {

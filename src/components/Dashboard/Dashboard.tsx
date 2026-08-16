@@ -5,7 +5,7 @@ import { useDashboard, SheetPrepConfig } from '@/context/DashboardContext';
 import { Header } from '@/components/Header/Header';
 import dynamic from 'next/dynamic';
 import { UploadZone } from '@/components/Upload/UploadZone';
-import { Loader2, Trash2, Copy, Eye, EyeOff, LayoutTemplate, Settings2, Trash, RefreshCw } from 'lucide-react';
+import { Loader2, Trash2, Copy, Eye, EyeOff, LayoutTemplate, Settings2, Trash, RefreshCw, PieChart } from 'lucide-react';
 
 const DashboardView = dynamic(() => import('@/components/Dashboard/Charts').then(mod => mod.DashboardView), { ssr: false });
 const FilterBar = dynamic(() => import('@/components/Dashboard/Charts').then(mod => mod.FilterBar), { ssr: false });
@@ -269,6 +269,94 @@ export const Dashboard = () => {
                         </div>
                       )
                     })}
+                  </div>
+                </div>
+
+                {/* Section 3: Pre-configure Charts */}
+                <div style={{ background: 'var(--surface)', padding: '1.5rem', borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                    <PieChart size={18} color="var(--primary)" />
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Pre-configure Charts</h3>
+                  </div>
+                  <p style={{ color: '#5f6368', fontSize: '0.85rem', marginBottom: '1.5rem', maxWidth: 800, lineHeight: 1.5 }}>
+                    Map your columns to generate a chart automatically when this table is imported. You can add multiple initial charts.
+                  </p>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {(activeConfig.initialCharts || []).map((chart, cIdx) => (
+                      <div key={cIdx} style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: '#f8f9fa', padding: '1rem', borderRadius: 8, border: '1px solid var(--border)' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: 1 }}>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#5f6368' }}>Chart Type</label>
+                          <select 
+                            value={chart.type} 
+                            onChange={e => {
+                               const newCharts = [...(activeConfig.initialCharts || [])];
+                               newCharts[cIdx].type = e.target.value as any;
+                               updatePrepConfig(activeConfig.id, { initialCharts: newCharts });
+                            }} 
+                            style={{ padding: '0.5rem', borderRadius: 4, border: '1px solid var(--border)', outline: 'none' }}
+                          >
+                            <option value="pie">Pie Chart</option>
+                            <option value="bar">Bar Chart</option>
+                            <option value="line">Line Chart</option>
+                          </select>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: 1 }}>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#5f6368' }}>Category (Names/Groups)</label>
+                          <select 
+                            value={chart.catCol} 
+                            onChange={e => {
+                               const newCharts = [...(activeConfig.initialCharts || [])];
+                               newCharts[cIdx].catCol = e.target.value;
+                               updatePrepConfig(activeConfig.id, { initialCharts: newCharts });
+                            }} 
+                            style={{ padding: '0.5rem', borderRadius: 4, border: '1px solid var(--border)', outline: 'none' }}
+                          >
+                            <option value="" disabled>Select Column</option>
+                            {headers.map(h => <option key={h.name} value={h.name}>{h.name}</option>)}
+                          </select>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: 1 }}>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#5f6368' }}>Metric (Values)</label>
+                          <select 
+                            value={chart.valCol} 
+                            onChange={e => {
+                               const newCharts = [...(activeConfig.initialCharts || [])];
+                               newCharts[cIdx].valCol = e.target.value;
+                               updatePrepConfig(activeConfig.id, { initialCharts: newCharts });
+                            }} 
+                            style={{ padding: '0.5rem', borderRadius: 4, border: '1px solid var(--border)', outline: 'none' }}
+                          >
+                            <option value="" disabled>Select Column</option>
+                            {headers.map(h => <option key={h.name} value={h.name}>{h.name}</option>)}
+                          </select>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '0.25rem' }}>
+                          <button 
+                            onClick={() => {
+                              const newCharts = (activeConfig.initialCharts || []).filter((_, i) => i !== cIdx);
+                              updatePrepConfig(activeConfig.id, { initialCharts: newCharts });
+                            }}
+                            style={{ padding: '0.5rem', background: '#fce8e6', color: '#d93025', border: 'none', borderRadius: 4, cursor: 'pointer' }}
+                            title="Remove Chart"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    <button 
+                      onClick={() => {
+                        const current = activeConfig.initialCharts || [];
+                        updatePrepConfig(activeConfig.id, { 
+                          initialCharts: [...current, { type: 'pie', catCol: '', valCol: '' }] 
+                        });
+                      }}
+                      style={{ padding: '0.75rem', background: 'var(--primary-light)', color: 'var(--primary)', border: '1px dashed var(--primary)', borderRadius: 8, fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', textAlign: 'center' }}
+                    >
+                      + Add Chart Mapping
+                    </button>
                   </div>
                 </div>
 
