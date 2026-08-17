@@ -340,7 +340,7 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
       }
 
       // Smart AI Ranking for Charts
-      let allChartCands: { sheet: string, cat: string, val: string, score: number, isDate: boolean }[] = [];
+      let allChartCands: { sheet: string, cat: string, val: string, score: number, isDate: boolean, cardinality: number }[] = [];
       const dateKeywords = ['month', 'date', 'year', 'day', 'quarter', 'period', 'week'];
       const catKeywords = ['region', 'category', 'product', 'brand', 'channel', 'status', 'type', 'country', 'city', 'department'];
 
@@ -354,12 +354,24 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
             const lval = val.toLowerCase();
             const lcat = cat.toLowerCase();
             
+            // Cardinality calculation (how many unique values)
+            const uniqueValues = new Set(sheet.records.map(r => r[cat])).size;
+            
+            // Penalize high cardinality unless it's a date trend
+            const isDate = sheet.dateCols.includes(cat) || dateKeywords.some(kw => lcat.includes(kw));
+            if (isDate) {
+               score += 2000;
+            } else {
+               if (uniqueValues > 40) score -= 5000; // Too many categories for a chart
+               else if (uniqueValues >= 2 && uniqueValues <= 10) score += 2000; // Perfect for pie/bar
+               else if (uniqueValues > 10 && uniqueValues <= 40) score += 500; // Acceptable for bar
+            }
+            
             kpiKeywords.forEach(kw => { if (lval.includes(kw)) score += 1000; });
             catKeywords.forEach(kw => { if (lcat.includes(kw)) score += 800; });
             dateKeywords.forEach(kw => { if (lcat.includes(kw)) score += 1200; }); // Trends are highly valuable
 
-            const isDate = sheet.dateCols.includes(cat) || dateKeywords.some(kw => lcat.includes(kw));
-            allChartCands.push({ sheet: sheet.name, cat, val, score, isDate });
+            allChartCands.push({ sheet: sheet.name, cat, val, score, isDate, cardinality: uniqueValues });
           });
         });
       });
@@ -387,14 +399,19 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
       });
       
       for (const c of allChartCands) {
+        if (c.score < -1000) continue; // Skip terrible charts (e.g. IDs)
         if (!seenCombos.has(`${c.cat}-${c.val}`) && topCharts.length < 5) {
           seenCombos.add(`${c.cat}-${c.val}`);
+          
+          let chartType: 'bar'|'line'|'pie'|'doughnut' = 'bar';
+          if (c.isDate) chartType = 'line';
+          else if (c.cardinality <= 8 && topCharts.length % 2 !== 0) chartType = 'pie';
           
           topCharts.push({
             id: `auto-chart-${Date.now()}-${topCharts.length}`,
             categoryCol: c.cat,
             title: `${c.val} by ${c.cat}`, 
-            type: c.isDate ? 'line' : (topCharts.length % 2 === 0 ? 'bar' : 'pie'),
+            type: chartType,
             series: [{
               id: `series-${Date.now()}`,
               sheetName: c.sheet,
