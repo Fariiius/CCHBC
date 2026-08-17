@@ -59,7 +59,7 @@ export async function POST(req: Request) {
       originalSheetName: name,
       tableNameOverride: undefined,
       rowOffset: 0,
-      headerRowIdx: undefined,
+      headerRow: undefined,
       dataEndRow: undefined,
       excludedRows: [],
       excludedCols: [],
@@ -73,35 +73,65 @@ export async function POST(req: Request) {
       const ws = wb.Sheets[sheetName];
       const rawArray = xlsx.utils.sheet_to_json(ws, { header: 1 }) as any[][];
       
-      let headerRowIdx = config.headerRowIdx;
-      let maxStrings = 0;
-
-      // If no config provided, auto-detect
-      if (headerRowIdx === undefined) {
-        for (let i = 0; i < Math.min(rawArray.length, 20); i++) {
-          const row = rawArray[i];
-          if (!row || !Array.isArray(row)) continue;
-          const stringCount = row.filter(val => typeof val === 'string' && val.trim() !== '').length;
-          if (stringCount > maxStrings) {
-            maxStrings = stringCount;
-            headerRowIdx = i;
-          }
-        }
-      }
-      
-      // If config provided, add the rowOffset
       const offset = config.rowOffset || 0;
-      if (headerRowIdx !== undefined) {
-         headerRowIdx += offset;
+      
+      let finalRows: any[][] = [];
+      let finalRowIds: string[] = [];
+      
+      // Reconstruct rows based on rowOrder, using rawArray and addedRows
+      if (config.rowOrder && Array.isArray(config.rowOrder)) {
+          config.rowOrder.forEach((rowId: string) => {
+             // Exclude logic
+             if (config.excludedRowIds && config.excludedRowIds.includes(rowId)) return;
+             
+             let row = [];
+             if (rowId.startsWith('orig_')) {
+                 const origIdx = parseInt(rowId.replace('orig_', '')) + offset;
+                 row = rawArray[origIdx] ? [...rawArray[origIdx]] : [];
+             } else {
+                 row = config.addedRows && config.addedRows[rowId] ? [...config.addedRows[rowId]] : [];
+             }
+             
+             // Apply cell edits
+             const colsCount = Math.max(row.length, 50) + (config.addedCols || 0);
+             for (let c = 0; c < colsCount; c++) {
+                 if (config.cellEdits && config.cellEdits[`${rowId}_${c}`] !== undefined) {
+                     row[c] = config.cellEdits[`${rowId}_${c}`];
+                 }
+             }
+             
+             finalRows.push(row);
+             finalRowIds.push(rowId);
+          });
+          
+          // Append any remaining original rows that weren't in rowOrder
+          const previewLength = config.rowOrder.filter((id: string) => id.startsWith('orig_')).length;
+          for (let i = previewLength + offset; i < rawArray.length; i++) {
+             // We assume these were never excluded because they weren't in the preview
+             finalRows.push([...(rawArray[i] || [])]);
+             finalRowIds.push(`orig_${i - offset}`);
+          }
+      } else {
+          // Fallback (e.g. if config wasn't provided or is old format)
+          finalRows = rawArray.slice(offset);
+          finalRowIds = finalRows.map((_, i) => `orig_${i}`);
       }
       
-      headerRowIdx = headerRowIdx || 0;
-      if (rawArray.length <= headerRowIdx + 1) continue; // No data rows
-
-      const headerRow = rawArray[headerRowIdx] || [];
+      let headerVisIdx = 0;
+      if (config.headerRowId) {
+          const idx = finalRowIds.indexOf(config.headerRowId);
+          if (idx !== -1) headerVisIdx = idx;
+      }
+      
+      let endVisIdx = finalRows.length - 1;
+      if (config.dataEndRowId) {
+          const idx = finalRowIds.indexOf(config.dataEndRowId);
+          if (idx !== -1) endVisIdx = idx;
+      }
+      
+      const headerRow = finalRows[headerVisIdx] || [];
       const rawHeaders = headerRow.map((h: any, i: number) => h !== undefined && h !== null && String(h).trim() !== '' ? String(h).trim() : `Column_${i+1}`);
       
-      // Ensure unique headers
       const headersMap: { index: number, name: string }[] = [];
       const headerCounts: Record<string, number> = {};
       rawHeaders.forEach((h: string, i: number) => {
@@ -114,14 +144,11 @@ export async function POST(req: Request) {
           }
           headersMap.push({ index: i, name });
       });
-
-      // Append added cols
+      
       for (let i = 0; i < (config.addedCols || 0); i++) {
          let name = `Custom Col ${i+1}`;
-         // Add them with a special index marker so we know it's a custom col
          headersMap.push({ index: headerRow.length + i, name });
       }
-
 
       // Filter excluded cols
       const headers = config.excludedCols ? headersMap.filter(h => !config.excludedCols.includes(h.name)) : headersMap;
@@ -134,52 +161,19 @@ export async function POST(req: Request) {
       });
 
       const records: any[] = [];
-      const dataEndRow = config.dataEndRow !== undefined ? (config.dataEndRow + (config.rowOffset || 0)) : (rawArray.length - 1);
-      const excludedRowsMapped = (config.excludedRows || []).map((r: number) => r + (config.rowOffset || 0));
-      
-      for (let i = headerRowIdx + 1; i <= dataEndRow && i < rawArray.length; i++) {
-        // Apply excluded rows from config
-        if (excludedRowsMapped.includes(i)) continue;
-
-        const row = rawArray[i];
-        if (!row || row.length === 0) continue;
-        const record: any = {};
-        let hasData = false;
-        
-        // Calculate the relative row index used in the UI for editKeys
-        const relativeRowIdx = i - (config.rowOffset || 0);
-        
-        headers.forEach((h) => {
-            const isAddedCol = h.index >= headerRow.length;
-            let val;
-            
-            if (isAddedCol) {
-                const addedColIdx = h.index - headerRow.length;
-                const editKey = `${relativeRowIdx}_added_${addedColIdx}`;
-                val = config.cellEdits && config.cellEdits[editKey] !== undefined ? config.cellEdits[editKey] : '';
-            } else {
-                const editKey = `${relativeRowIdx}_${h.index}`;
-                val = config.cellEdits && config.cellEdits[editKey] !== undefined ? config.cellEdits[editKey] : row[h.index];
-            }
-
-            if (val !== undefined && val !== null && val !== '') hasData = true;
-            record[h.name] = val;
-        });
-        if (hasData) records.push(record);
-      }
-      
-      // Append added rows
-      if (config.addedRows && config.addedRows.length > 0) {
-         config.addedRows.forEach((addedRow: any[]) => {
-            const record: any = {};
-            let hasData = false;
-            headers.forEach(h => {
-                const val = addedRow[h.index];
-                if (val !== undefined && val !== null && val !== '') hasData = true;
-                record[h.name] = val;
-            });
-            if (hasData) records.push(record);
-         });
+      for (let i = headerVisIdx + 1; i <= endVisIdx && i < finalRows.length; i++) {
+          const row = finalRows[i];
+          if (!row) continue;
+          
+          const record: any = {};
+          let hasData = false;
+          
+          headers.forEach((h) => {
+              const val = row[h.index];
+              if (val !== undefined && val !== null && val !== '') hasData = true;
+              record[h.name] = val;
+          });
+          if (hasData) records.push(record);
       }
 
       if (records.length === 0) continue;
@@ -278,7 +272,7 @@ export async function POST(req: Request) {
             columns,
             records: records.slice(0, 5000),
             totalRows: records.length,
-            headerRowIdx,
+            headerRowIdx: headerVisIdx,
             rawPreview: rawArray.slice(0, 1000)
           });
 
@@ -292,7 +286,7 @@ export async function POST(req: Request) {
             columns,
             records: records.slice(0, 5000),
             totalRows: records.length,
-            headerRowIdx,
+            headerRowIdx: headerVisIdx,
             rawPreview: rawArray.slice(0, 1000)
           });
       }

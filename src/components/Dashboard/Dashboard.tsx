@@ -18,6 +18,84 @@ export const Dashboard = () => {
   } = useDashboard();
 
   const [activeTabId, setActiveTabId] = useState<string>('');
+  const [draggedRowId, setDraggedRowId] = useState<string | null>(null);
+
+  const activeConfig = stagingWorkspace?.configs.find(c => c.id === activeTabId) || (stagingWorkspace && stagingWorkspace.configs[0]);
+
+  const handleAddRow = () => {
+    if (!activeConfig) return;
+    const newRowId = 'added_' + Date.now();
+    const colCount = (activeConfig.rawPreview[0]?.length || 0) + (activeConfig.addedCols || 0);
+    const newRowOrder = [newRowId, ...(activeConfig.rowOrder || [])];
+    updatePrepConfig(activeConfig.id, {
+      rowOrder: newRowOrder,
+      addedRows: { ...activeConfig.addedRows, [newRowId]: Array(colCount).fill('') }
+    });
+  };
+
+  const handleDuplicateRow = (sourceRowId: string) => {
+    if (!activeConfig) return;
+    const newOrder = [...(activeConfig.rowOrder || [])];
+    const newAddedRows = { ...(activeConfig.addedRows || {}) };
+    
+    const copiedRowId = 'added_' + Date.now();
+    
+    let dataToCopy: any[] = [];
+    if (sourceRowId.startsWith('orig_')) {
+       const origIdx = parseInt(sourceRowId.replace('orig_', ''));
+       dataToCopy = [...activeConfig.rawPreview[origIdx]];
+    } else {
+       dataToCopy = [...(activeConfig.addedRows[sourceRowId] || [])];
+    }
+    
+    const colsCount = (activeConfig.rawPreview[0]?.length || 0) + (activeConfig.addedCols || 0);
+    for (let c = 0; c < colsCount; c++) {
+       const sourceEditKey = `${sourceRowId}_${c}`;
+       if (activeConfig.cellEdits && activeConfig.cellEdits[sourceEditKey] !== undefined) {
+           dataToCopy[c] = activeConfig.cellEdits[sourceEditKey];
+       }
+    }
+
+    newAddedRows[copiedRowId] = dataToCopy;
+    
+    const srcIdx = newOrder.indexOf(sourceRowId);
+    if (srcIdx !== -1) {
+       newOrder.splice(srcIdx + 1, 0, copiedRowId);
+    } else {
+       newOrder.push(copiedRowId);
+    }
+
+    updatePrepConfig(activeConfig.id, {
+      rowOrder: newOrder,
+      addedRows: newAddedRows
+    });
+  };
+
+  const handleDragStart = (e: React.DragEvent, rowId: string) => {
+    setDraggedRowId(rowId);
+    e.dataTransfer.effectAllowed = 'move';
+    setTimeout(() => { if (e.target instanceof HTMLElement) e.target.style.opacity = '0.5'; }, 0);
+  };
+
+  const handleDragOver = (e: React.DragEvent, targetRowId: string) => {
+    e.preventDefault();
+    if (!draggedRowId || draggedRowId === targetRowId || !activeConfig) return;
+    
+    const newOrder = [...(activeConfig.rowOrder || [])];
+    const fromIdx = newOrder.indexOf(draggedRowId);
+    const toIdx = newOrder.indexOf(targetRowId);
+    
+    if (fromIdx !== -1 && toIdx !== -1) {
+      newOrder.splice(fromIdx, 1);
+      newOrder.splice(toIdx, 0, draggedRowId);
+      updatePrepConfig(activeConfig.id, { rowOrder: newOrder });
+    }
+  };
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    setDraggedRowId(null);
+    if (e.target instanceof HTMLElement) e.target.style.opacity = '1';
+  };
 
   React.useEffect(() => {
     if (stagingWorkspace && stagingWorkspace.configs && stagingWorkspace.configs.length > 0 && (!activeTabId || !stagingWorkspace.configs.find(c => c.id === activeTabId))) {
@@ -53,12 +131,16 @@ export const Dashboard = () => {
   if (workspaces.length === 0 && !stagingWorkspace) return <UploadZone />;
 
   if (stagingWorkspace) {
-    const activeConfig = stagingWorkspace.configs.find(c => c.id === activeTabId) || stagingWorkspace.configs[0];
-
-    // Derive headers for the active config based on its headerRowIdx
+    // Derive headers for the active config based on its headerRowId
     let headers: { index: number, originalName: string, name: string }[] = [];
-    if (activeConfig && activeConfig.rawPreview[activeConfig.headerRowIdx]) {
-      const headerRow = activeConfig.rawPreview[activeConfig.headerRowIdx];
+    if (activeConfig && activeConfig.headerRowId) {
+      let headerRow: any[] = [];
+      if (activeConfig.headerRowId.startsWith('orig_')) {
+          const origIdx = parseInt(activeConfig.headerRowId.replace('orig_', ''));
+          headerRow = activeConfig.rawPreview[origIdx] || [];
+      } else {
+          headerRow = activeConfig.addedRows[activeConfig.headerRowId] || [];
+      }
       const counts: Record<string, number> = {};
 
       headerRow.forEach((h: any, i: number) => {
@@ -172,7 +254,10 @@ export const Dashboard = () => {
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left', whiteSpace: 'nowrap' }}>
                       <thead style={{ position: 'sticky', top: 0, background: 'var(--surface)', zIndex: 10, boxShadow: '0 1px 0 var(--border)' }}>
                         <tr>
-                          <th style={{ width: 140, padding: '0.75rem', color: '#5f6368', fontWeight: 600 }}>Row Actions</th>
+                          <th style={{ width: 180, padding: '0.75rem', color: '#5f6368', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            Row Actions
+                            <button onClick={handleAddRow} style={{ padding: '0.2rem 0.4rem', background: 'var(--primary-light)', color: 'var(--primary)', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600, fontSize: '0.7rem' }}>+ Row</button>
+                          </th>
                           {activeConfig.rawPreview[0]?.map((_, i) => (
                             <th key={i} style={{ padding: '0.75rem', color: '#5f6368', fontWeight: 600, borderLeft: '1px solid var(--border)' }}>Col {i + 1}</th>
                           ))}
@@ -188,162 +273,88 @@ export const Dashboard = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {activeConfig.rawPreview.map((row, idx) => {
-                          const isHeader = activeConfig.headerRowIdx === idx;
-                          const isEndRow = activeConfig.dataEndRow === idx;
-                          const isOutsideBounds = (idx < activeConfig.headerRowIdx) || (activeConfig.dataEndRow !== undefined && idx > activeConfig.dataEndRow);
-                          const isExcluded = activeConfig.excludedRows.includes(idx) || isOutsideBounds;
+                        {(activeConfig.rowOrder || []).map((rowId, visualIdx) => {
+                          const isOrig = rowId.startsWith('orig_');
+                          const origIdx = isOrig ? parseInt(rowId.replace('orig_', '')) : -1;
+                          
+                          let row = isOrig ? activeConfig.rawPreview[origIdx] : activeConfig.addedRows[rowId];
+                          if (!row) row = []; // Safety
+
+                          const isHeader = activeConfig.headerRowId === rowId;
+                          const isEndRow = activeConfig.dataEndRowId === rowId;
+                          
+                          const headerVisIdx = activeConfig.headerRowId ? activeConfig.rowOrder.indexOf(activeConfig.headerRowId) : 0;
+                          const endVisIdx = activeConfig.dataEndRowId ? activeConfig.rowOrder.indexOf(activeConfig.dataEndRowId) : activeConfig.rowOrder.length;
+                          
+                          const isOutsideBounds = (visualIdx < headerVisIdx) || (visualIdx > endVisIdx);
+                          const isExcluded = (activeConfig.excludedRowIds || []).includes(rowId) || isOutsideBounds;
 
                           return (
-                            <tr key={idx} style={{
-                              background: isHeader ? '#e8f0fe' : (isEndRow ? '#fce8e6' : (isExcluded ? '#f8f9fa' : 'white')),
-                              opacity: isExcluded && !isHeader && !isEndRow ? 0.4 : 1,
-                              borderBottom: '1px solid var(--border)',
-                              transition: 'background 0.2s'
-                            }}>
+                            <tr 
+                              key={rowId} 
+                              draggable
+                              onDragStart={(e) => handleDragStart(e, rowId)}
+                              onDragOver={(e) => handleDragOver(e, rowId)}
+                              onDragEnd={handleDragEnd}
+                              style={{
+                                background: isHeader ? '#e8f0fe' : (isEndRow ? '#fce8e6' : (isExcluded ? '#f8f9fa' : 'white')),
+                                opacity: isExcluded && !isHeader && !isEndRow ? 0.4 : 1,
+                                borderBottom: '1px solid var(--border)',
+                                transition: 'background 0.2s',
+                                cursor: 'grab'
+                              }}
+                            >
                               <td style={{ padding: '0.5rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                 <button
                                   onClick={() => {
-                                    if (activeConfig.excludedRows.includes(idx)) {
-                                      updatePrepConfig(activeConfig.id, { excludedRows: activeConfig.excludedRows.filter(r => r !== idx) });
+                                    const ex = activeConfig.excludedRowIds || [];
+                                    if (ex.includes(rowId)) {
+                                      updatePrepConfig(activeConfig.id, { excludedRowIds: ex.filter(r => r !== rowId) });
                                     } else {
-                                      updatePrepConfig(activeConfig.id, { excludedRows: [...activeConfig.excludedRows, idx] });
+                                      updatePrepConfig(activeConfig.id, { excludedRowIds: [...ex, rowId] });
                                     }
                                   }}
-                                  style={{ padding: 4, background: 'transparent', border: 'none', cursor: 'pointer', color: activeConfig.excludedRows.includes(idx) ? '#5f6368' : '#d93025' }}
-                                  title={activeConfig.excludedRows.includes(idx) ? "Restore Row" : "Exclude Row"}
+                                  style={{ padding: 4, background: 'transparent', border: 'none', cursor: 'pointer', color: (activeConfig.excludedRowIds||[]).includes(rowId) ? '#5f6368' : '#d93025' }}
                                 >
-                                  {activeConfig.excludedRows.includes(idx) ? <RefreshCw size={14} /> : <Trash2 size={14} />}
+                                  {(activeConfig.excludedRowIds||[]).includes(rowId) ? <RefreshCw size={14} /> : <Trash2 size={14} />}
                                 </button>
 
                                 {isHeader ? (
                                   <span style={{ color: 'var(--primary)', fontWeight: 700, fontSize: '0.7rem', padding: '0.2rem 0.4rem', background: '#d2e3fc', borderRadius: 4 }}>HEADER</span>
                                 ) : (
-                                  <button onClick={() => updatePrepConfig(activeConfig.id, { headerRowIdx: idx })} disabled={activeConfig.excludedRows.includes(idx)} style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', cursor: activeConfig.excludedRows.includes(idx) ? 'not-allowed' : 'pointer', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--foreground)' }}>Set Header</button>
+                                  <button onClick={() => updatePrepConfig(activeConfig.id, { headerRowId: rowId })} disabled={(activeConfig.excludedRowIds||[]).includes(rowId)} style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', cursor: (activeConfig.excludedRowIds||[]).includes(rowId) ? 'not-allowed' : 'pointer', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--foreground)' }}>Set Header</button>
                                 )}
 
                                 {isEndRow ? (
                                   <span style={{ color: '#d93025', fontWeight: 700, fontSize: '0.7rem', padding: '0.2rem 0.4rem', background: '#fad2e1', borderRadius: 4 }}>END</span>
                                 ) : (
-                                  <button onClick={() => updatePrepConfig(activeConfig.id, { dataEndRow: activeConfig.dataEndRow === idx ? undefined : idx })} disabled={activeConfig.excludedRows.includes(idx) || idx <= activeConfig.headerRowIdx} style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', cursor: (activeConfig.excludedRows.includes(idx) || idx <= activeConfig.headerRowIdx) ? 'not-allowed' : 'pointer', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--foreground)' }}>Set End</button>
-                                )}
-                                <button
-                                  onClick={() => updatePrepConfig(activeConfig.id, { dataEndRow: idx })}
-                                  style={{ padding: 4, background: isEndRow ? 'var(--primary)' : 'transparent', color: isEndRow ? 'white' : '#5f6368', border: 'none', cursor: 'pointer', borderRadius: 4 }}
-                                  title="Set End Row"
-                                ><ArrowDownToLine size={16} /></button>
-                                
-                                {isExcluded && idx > activeConfig.headerRowIdx && (
-                                   <button 
-                                     onClick={() => {
-                                        duplicatePrepSheet(activeConfig.id, idx);
-                                     }}
-                                     style={{ marginLeft: '0.25rem', padding: '0.25rem 0.5rem', fontSize: '0.65rem', background: 'var(--primary-light)', color: 'var(--primary)', border: '1px solid var(--primary)', borderRadius: 4, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}
-                                     title="Extract a brand new table starting at this row"
-                                   >Start Table Here</button>
+                                  <button onClick={() => updatePrepConfig(activeConfig.id, { dataEndRowId: isEndRow ? undefined : rowId })} disabled={(activeConfig.excludedRowIds||[]).includes(rowId) || visualIdx <= headerVisIdx} style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', cursor: ((activeConfig.excludedRowIds||[]).includes(rowId) || visualIdx <= headerVisIdx) ? 'not-allowed' : 'pointer', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--foreground)' }}>Set End</button>
                                 )}
                               </td>
-                              {row.map((cell: any, cIdx: number) => {
-                                const editKey = `${idx}_${cIdx}`;
-                                const displayVal = activeConfig.cellEdits && activeConfig.cellEdits[editKey] !== undefined ? activeConfig.cellEdits[editKey] : (cell !== undefined && cell !== null ? String(cell) : '');
+                              
+                              {/* Render original columns + added columns */}
+                              {Array.from({ length: (activeConfig.rawPreview[0]?.length || 0) + (activeConfig.addedCols || 0) }).map((_, cIdx) => {
+                                const editKey = `${rowId}_${cIdx}`;
+                                const cellVal = row[cIdx];
+                                const displayVal = activeConfig.cellEdits && activeConfig.cellEdits[editKey] !== undefined ? activeConfig.cellEdits[editKey] : (cellVal !== undefined && cellVal !== null ? String(cellVal) : '');
                                 return (
                                   <td key={cIdx} style={{ padding: 0, borderLeft: '1px solid var(--border)', maxWidth: 200 }}>
                                     <input
                                       type="text"
                                       value={displayVal}
-                                      onChange={(e) => {
-                                        const edits = { ...(activeConfig.cellEdits || {}) };
-                                        edits[editKey] = e.target.value;
-                                        updatePrepConfig(activeConfig.id, { cellEdits: edits });
-                                      }}
-                                      style={{ width: '100%', height: '100%', padding: '0.5rem 0.75rem', border: 'none', outline: 'none', background: 'transparent', fontSize: '0.8rem', color: isExcluded ? '#9ca3af' : 'var(--foreground)' }}
+                                      onChange={e => updatePrepConfig(activeConfig.id, { cellEdits: { ...(activeConfig.cellEdits || {}), [editKey]: e.target.value } })}
+                                      style={{ width: '100%', padding: '0.6rem', border: 'none', background: 'transparent', outline: 'none', color: isExcluded ? '#9aa0a6' : 'inherit', cursor: isExcluded ? 'not-allowed' : 'text' }}
+                                      disabled={isExcluded}
+                                      placeholder={isOrig && cIdx < (activeConfig.rawPreview[0]?.length || 0) ? '' : 'Type...'}
                                     />
                                   </td>
                                 );
                               })}
-                              {Array.from({ length: activeConfig.addedCols || 0 }).map((_, cIdx) => {
-                                const editKey = `${idx}_added_${cIdx}`;
-                                const displayVal = activeConfig.cellEdits && activeConfig.cellEdits[editKey] !== undefined ? activeConfig.cellEdits[editKey] : '';
-                                return (
-                                  <td key={`added_${cIdx}`} style={{ padding: 0, borderLeft: '1px solid var(--border)', maxWidth: 200 }}>
-                                    <input
-                                      type="text"
-                                      value={displayVal}
-                                      onChange={(e) => {
-                                        const edits = { ...(activeConfig.cellEdits || {}) };
-                                        edits[editKey] = e.target.value;
-                                        updatePrepConfig(activeConfig.id, { cellEdits: edits });
-                                      }}
-                                      style={{ width: '100%', height: '100%', padding: '0.5rem 0.75rem', border: 'none', outline: 'none', background: '#f8f9fa', fontSize: '0.8rem', color: 'var(--primary)' }}
-                                    />
-                                  </td>
-                                );
-                              })}
-                              <td></td>
                             </tr>
                           );
                         })}
-
-                        {/* Render Added Rows */}
-                        {(activeConfig.addedRows || []).map((addedRow, aIdx) => {
-                          const virtualIdx = activeConfig.rawPreview.length + aIdx;
-                          return (
-                            <tr key={`added_${aIdx}`} style={{ background: '#fdfaeb', borderBottom: '1px solid var(--border)' }}>
-                              <td style={{ padding: '0.5rem 0.75rem' }}>
-                                <button
-                                  onClick={() => {
-                                    const newRows = [...(activeConfig.addedRows || [])];
-                                    newRows.splice(aIdx, 1);
-                                    updatePrepConfig(activeConfig.id, { addedRows: newRows });
-                                  }}
-                                  style={{ padding: 4, background: 'transparent', border: 'none', cursor: 'pointer', color: '#d93025' }}
-                                  title="Delete Inserted Row"
-                                ><Trash size={16} /></button>
-                              </td>
-                              {activeConfig.rawPreview[0]?.map((_, cIdx) => (
-                                <td key={cIdx} style={{ padding: 0, borderLeft: '1px solid var(--border)' }}>
-                                  <input
-                                    type="text"
-                                    value={addedRow[cIdx] || ''}
-                                    onChange={(e) => {
-                                      const newRows = [...(activeConfig.addedRows || [])];
-                                      newRows[aIdx][cIdx] = e.target.value;
-                                      updatePrepConfig(activeConfig.id, { addedRows: newRows });
-                                    }}
-                                    style={{ width: '100%', height: '100%', padding: '0.5rem 0.75rem', border: 'none', outline: 'none', background: 'transparent', fontSize: '0.8rem' }}
-                                  />
-                                </td>
-                              ))}
-                              {Array.from({ length: activeConfig.addedCols || 0 }).map((_, cIdx) => (
-                                <td key={`added_col_${cIdx}`} style={{ padding: 0, borderLeft: '1px solid var(--border)' }}>
-                                  <input
-                                    type="text"
-                                    value={addedRow[activeConfig.rawPreview[0]?.length + cIdx] || ''}
-                                    onChange={(e) => {
-                                      const newRows = [...(activeConfig.addedRows || [])];
-                                      newRows[aIdx][activeConfig.rawPreview[0]?.length + cIdx] = e.target.value;
-                                      updatePrepConfig(activeConfig.id, { addedRows: newRows });
-                                    }}
-                                    style={{ width: '100%', height: '100%', padding: '0.5rem 0.75rem', border: 'none', outline: 'none', background: 'transparent', fontSize: '0.8rem' }}
-                                  />
-                                </td>
-                              ))}
-                              <td></td>
-                            </tr>
-                          )
-                        })}
                       </tbody>
                     </table>
-                  </div>
-
-                  <div style={{ marginTop: '1rem' }}>
-                    <button
-                      onClick={() => {
-                        const newRows = [...(activeConfig.addedRows || []), []];
-                        updatePrepConfig(activeConfig.id, { addedRows: newRows });
-                      }}
-                      style={{ padding: '0.5rem 1rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}
-                    >+ Insert Row</button>
                   </div>
                 </div>
 

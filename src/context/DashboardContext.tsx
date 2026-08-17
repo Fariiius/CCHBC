@@ -24,19 +24,20 @@ export interface SheetPrepConfig {
   id: string;
   originalSheetName: string;
   tableNameOverride?: string;
-  rowOffset?: number;
-  cellEdits?: Record<string, string>;
-  addedCols?: number;
-  addedRows?: string[][];
-  headerRowIdx: number;
-  dataEndRow?: number;
-  excludedRows: number[];
+  rowOffset: number;
+  rowOrder: string[];
+  addedRows: Record<string, any[]>;
+  cellEdits: Record<string, string>;
+  headerRowId?: string;
+  dataEndRowId?: string;
+  excludedRowIds: string[];
   excludedCols: string[];
   columnTypes: Record<string, 'text'|'numeric'|'date'>;
   columnRenames?: Record<string, string>;
+  addedCols?: number;
   rawPreview: any[][];
-  initialCharts?: { title: string, catCol: string, valCol: string, type: 'pie'|'bar'|'line' }[];
   initialKpis?: { col: string, title: string }[];
+  initialCharts?: { catCol: string, valCol: string, type: 'pie'|'bar'|'line', title?: string }[];
 }
 
 export interface ChartSeries {
@@ -97,7 +98,7 @@ interface DashboardContextProps {
   closeWorkspace: (id: string) => void;
   handleFileUpload: (file: File) => Promise<void>;
   updatePrepConfig: (sheetId: string, updates: Partial<SheetPrepConfig>) => void;
-  duplicatePrepSheet: (sheetId: string, startRowIdx?: number) => void;
+  duplicatePrepSheet: (sheetId: string, startRowId?: string) => void;
   removePrepSheet: (sheetId: string) => void;
   resetDashboard: () => void;
   confirmStaging: () => void;
@@ -181,14 +182,16 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
          originalSheetName: s.originalSheetName,
          tableNameOverride: s.tableNameOverride,
          rowOffset: s.rowOffset,
-         headerRowIdx: s.defaultHeaderRowIdx,
+         rowOrder: (s.rawPreview || []).map((_: any, idx: number) => `orig_${idx}`),
+         addedRows: {},
          cellEdits: {},
-         addedCols: 0,
-         addedRows: [],
-         excludedRows: [],
+         headerRowId: `orig_${s.defaultHeaderRowIdx || 0}`,
+         dataEndRowId: undefined,
+         excludedRowIds: [],
          excludedCols: [],
          columnTypes: {},
          columnRenames: {},
+         addedCols: 0,
          rawPreview: s.rawPreview,
          initialCharts: [],
          initialKpis: []
@@ -211,7 +214,7 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     });
   };
 
-  const duplicatePrepSheet = (sheetId: string, startRowIdx?: number) => {
+  const duplicatePrepSheet = (sheetId: string, startRowId?: string) => {
     setStagingWorkspace(prev => {
       if (!prev) return prev;
       const target = prev.configs.find(c => c.id === sheetId);
@@ -223,15 +226,16 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
         tableNameOverride: `Table ${prev.configs.length + 1}`,
         rawPreview: target.rawPreview,
         rowOffset: target.rowOffset,
-        headerRowIdx: startRowIdx !== undefined ? startRowIdx : (target.dataEndRow !== undefined ? target.dataEndRow + 1 : target.headerRowIdx + 1),
-        excludedRows: [],
+        rowOrder: target.rowOrder,
+        headerRowId: startRowId !== undefined ? startRowId : (target.dataEndRowId ? target.dataEndRowId : target.headerRowId),
+        excludedRowIds: [],
         excludedCols: [],
         columnTypes: {},
         initialCharts: [],
         initialKpis: [],
         cellEdits: {},
         addedCols: 0,
-        addedRows: [],
+        addedRows: {},
       };
       
       const targetIdx = prev.configs.findIndex(c => c.id === sheetId);
