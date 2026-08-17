@@ -97,7 +97,7 @@ interface DashboardContextProps {
   closeWorkspace: (id: string) => void;
   handleFileUpload: (file: File) => Promise<void>;
   updatePrepConfig: (sheetId: string, updates: Partial<SheetPrepConfig>) => void;
-  duplicatePrepSheet: (sheetId: string) => void;
+  duplicatePrepSheet: (sheetId: string, startRowIdx?: number) => void;
   removePrepSheet: (sheetId: string) => void;
   resetDashboard: () => void;
   confirmStaging: () => void;
@@ -212,15 +212,30 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     });
   };
 
-  const duplicatePrepSheet = (sheetId: string) => {
+  const duplicatePrepSheet = (sheetId: string, startRowIdx?: number) => {
     setStagingWorkspace(prev => {
       if (!prev) return prev;
       const target = prev.configs.find(c => c.id === sheetId);
       if (!target) return prev;
       
-      const newSheet = { ...target, id: `${target.originalSheetName} (Copy ${Date.now().toString().slice(-4)})` };
-      const targetIdx = prev.configs.findIndex(c => c.id === sheetId);
+      const newSheet: SheetPrepConfig = {
+        id: `${target.originalSheetName} (Table ${prev.configs.length + 1})`,
+        originalSheetName: target.originalSheetName,
+        tableNameOverride: `Table ${prev.configs.length + 1}`,
+        rawPreview: target.rawPreview,
+        rowOffset: target.rowOffset,
+        headerRowIdx: startRowIdx !== undefined ? startRowIdx : (target.dataEndRow !== undefined ? target.dataEndRow + 1 : target.headerRowIdx + 1),
+        excludedRows: [],
+        excludedCols: [],
+        columnTypes: {},
+        initialCharts: [],
+        initialKpis: [],
+        cellEdits: {},
+        addedCols: 0,
+        addedRows: [],
+      };
       
+      const targetIdx = prev.configs.findIndex(c => c.id === sheetId);
       const newConfigs = [...prev.configs];
       newConfigs.splice(targetIdx + 1, 0, newSheet);
       
