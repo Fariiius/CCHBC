@@ -141,6 +141,17 @@ export const Dashboard = () => {
             <div style={{ flex: 1, padding: '2rem', overflowY: 'auto' }}>
               <div style={{ maxWidth: 1200, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                 
+                {/* Section 0: Table Name */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--surface)', padding: '1.25rem 1.5rem', borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: '1px solid var(--border)' }}>
+                  <label style={{ fontSize: '1rem', fontWeight: 700, color: '#5f6368', flexShrink: 0 }}>Table Name:</label>
+                  <input 
+                    type="text" 
+                    value={activeConfig.tableNameOverride !== undefined ? activeConfig.tableNameOverride : activeConfig.id}
+                    onChange={e => updatePrepConfig(activeConfig.id, { tableNameOverride: e.target.value })}
+                    style={{ flex: 1, fontSize: '1rem', padding: '0.5rem', borderRadius: 6, border: '1px solid var(--border)', outline: 'none', fontWeight: 600, color: 'var(--foreground)' }}
+                  />
+                </div>
+                
                 {/* Section 1: Raw Data Cleansing */}
                 <div style={{ background: 'var(--surface)', padding: '1.5rem', borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: '1px solid var(--border)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
@@ -236,7 +247,21 @@ export const Dashboard = () => {
                           opacity: isHidden ? 0.5 : 1, transition: 'opacity 0.2s'
                         }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontWeight: 600, fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: isHidden ? '#9ca3af' : 'var(--foreground)' }} title={col.name}>{col.name}</span>
+                            <input
+                              type="text"
+                              value={(activeConfig.columnRenames && activeConfig.columnRenames[col.name]) ? activeConfig.columnRenames[col.name] : col.name}
+                              disabled={isHidden}
+                              onChange={e => {
+                                const newRenames = { ...(activeConfig.columnRenames || {}) };
+                                newRenames[col.name] = e.target.value;
+                                updatePrepConfig(activeConfig.id, { columnRenames: newRenames });
+                              }}
+                              style={{ fontWeight: 600, fontSize: '0.8rem', width: '130px', border: 'none', borderBottom: '1px solid transparent', outline: 'none', background: 'transparent', color: isHidden ? '#9ca3af' : 'var(--foreground)', transition: 'border 0.2s' }}
+                              title={col.name}
+                              placeholder="Column Name"
+                              onFocus={e => e.target.style.borderBottom = '1px solid var(--primary)'}
+                              onBlur={e => e.target.style.borderBottom = '1px solid transparent'}
+                            />
                             <button 
                               onClick={() => {
                                 if (isHidden) {
@@ -285,6 +310,20 @@ export const Dashboard = () => {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     {(activeConfig.initialCharts || []).map((chart, cIdx) => (
                       <div key={cIdx} style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: '#f8f9fa', padding: '1rem', borderRadius: 8, border: '1px solid var(--border)' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: 1.5 }}>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#5f6368' }}>Chart Title</label>
+                          <input 
+                            type="text"
+                            value={chart.title || ''} 
+                            placeholder="Auto-generated if empty"
+                            onChange={e => {
+                               const newCharts = [...(activeConfig.initialCharts || [])];
+                               newCharts[cIdx].title = e.target.value;
+                               updatePrepConfig(activeConfig.id, { initialCharts: newCharts });
+                            }} 
+                            style={{ padding: '0.5rem', borderRadius: 4, border: '1px solid var(--border)', outline: 'none' }}
+                          />
+                        </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: 1 }}>
                           <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#5f6368' }}>Chart Type</label>
                           <select 
@@ -350,12 +389,83 @@ export const Dashboard = () => {
                       onClick={() => {
                         const current = activeConfig.initialCharts || [];
                         updatePrepConfig(activeConfig.id, { 
-                          initialCharts: [...current, { type: 'pie', catCol: '', valCol: '' }] 
+                          initialCharts: [...current, { title: '', type: 'pie', catCol: '', valCol: '' }] 
                         });
                       }}
                       style={{ padding: '0.75rem', background: 'var(--primary-light)', color: 'var(--primary)', border: '1px dashed var(--primary)', borderRadius: 8, fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', textAlign: 'center' }}
                     >
                       + Add Chart Mapping
+                    </button>
+                  </div>
+                </div>
+
+                {/* Section 4: Pre-configure KPIs */}
+                <div style={{ background: 'var(--surface)', padding: '1.5rem', borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                    <LayoutTemplate size={18} color="var(--primary)" />
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Pre-configure KPIs</h3>
+                  </div>
+                  <p style={{ color: '#5f6368', fontSize: '0.85rem', marginBottom: '1.5rem', maxWidth: 800, lineHeight: 1.5 }}>
+                    Select a column to generate a top-level KPI metric automatically when this table is imported.
+                  </p>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {(activeConfig.initialKpis || []).map((kpi, kIdx) => (
+                      <div key={kIdx} style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: '#f8f9fa', padding: '1rem', borderRadius: 8, border: '1px solid var(--border)' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: 1.5 }}>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#5f6368' }}>KPI Title</label>
+                          <input 
+                            type="text"
+                            value={kpi.title || ''} 
+                            placeholder="e.g. Total Revenue"
+                            onChange={e => {
+                               const newKpis = [...(activeConfig.initialKpis || [])];
+                               newKpis[kIdx].title = e.target.value;
+                               updatePrepConfig(activeConfig.id, { initialKpis: newKpis });
+                            }} 
+                            style={{ padding: '0.5rem', borderRadius: 4, border: '1px solid var(--border)', outline: 'none' }}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: 1 }}>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#5f6368' }}>Metric (Value)</label>
+                          <select 
+                            value={kpi.col} 
+                            onChange={e => {
+                               const newKpis = [...(activeConfig.initialKpis || [])];
+                               newKpis[kIdx].col = e.target.value;
+                               updatePrepConfig(activeConfig.id, { initialKpis: newKpis });
+                            }} 
+                            style={{ padding: '0.5rem', borderRadius: 4, border: '1px solid var(--border)', outline: 'none' }}
+                          >
+                            <option value="" disabled>Select Column</option>
+                            {headers.map(h => <option key={h.name} value={h.name}>{h.name}</option>)}
+                          </select>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '0.25rem' }}>
+                          <button 
+                            onClick={() => {
+                              const newKpis = (activeConfig.initialKpis || []).filter((_, i) => i !== kIdx);
+                              updatePrepConfig(activeConfig.id, { initialKpis: newKpis });
+                            }}
+                            style={{ padding: '0.5rem', background: '#fce8e6', color: '#d93025', border: 'none', borderRadius: 4, cursor: 'pointer' }}
+                            title="Remove KPI"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    <button 
+                      onClick={() => {
+                        const current = activeConfig.initialKpis || [];
+                        updatePrepConfig(activeConfig.id, { 
+                          initialKpis: [...current, { title: '', col: '' }] 
+                        });
+                      }}
+                      style={{ padding: '0.75rem', background: 'var(--primary-light)', color: 'var(--primary)', border: '1px dashed var(--primary)', borderRadius: 8, fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', textAlign: 'center' }}
+                    >
+                      + Add KPI Mapping
                     </button>
                   </div>
                 </div>

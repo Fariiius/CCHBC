@@ -23,13 +23,16 @@ export interface SheetAnalysis {
 export interface SheetPrepConfig {
   id: string;
   originalSheetName: string;
+  tableNameOverride?: string;
   headerRowIdx: number;
   dataEndRow?: number;
   excludedRows: number[];
   excludedCols: string[];
   columnTypes: Record<string, 'text'|'numeric'|'date'>;
+  columnRenames?: Record<string, string>;
   rawPreview: any[][];
-  initialCharts?: { catCol: string, valCol: string, type: 'pie'|'bar'|'line' }[];
+  initialCharts?: { title: string, catCol: string, valCol: string, type: 'pie'|'bar'|'line' }[];
+  initialKpis?: { col: string, title: string }[];
 }
 
 export interface ChartSeries {
@@ -177,8 +180,10 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
          excludedRows: [],
          excludedCols: [],
          columnTypes: {},
+         columnRenames: {},
          rawPreview: s.rawPreview,
-         initialCharts: []
+         initialCharts: [],
+         initialKpis: []
       }));
       setStagingWorkspace({ configs });
     } catch (err: any) {
@@ -254,6 +259,24 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
         };
       });
 
+      // 0. User Pre-Configured KPIs
+      const topKpis: KpiConfig[] = [];
+      const seenKpiCols = new Set<string>();
+      
+      stagingWorkspace.configs.forEach(config => {
+        if (config.initialKpis) {
+           config.initialKpis.forEach(ik => {
+             topKpis.push({
+               id: `auto-kpi-${Date.now()}-${topKpis.length}`,
+               sheetName: config.tableNameOverride || config.id, // match the renamed table
+               col: ik.col,
+               x: topKpis.length * 3, y: 0, w: 3, h: 2
+             });
+             seenKpiCols.add(ik.col);
+           });
+        }
+      });
+
       // Smart Ranking for KPIs
       let allKpiCands: { sheet: string, col: string, score: number, val: number }[] = [];
       analyzed.forEach((sheet: SheetAnalysis) => {
@@ -270,8 +293,6 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
       });
       allKpiCands.sort((a, b) => b.score - a.score);
       
-      const seenKpiCols = new Set<string>();
-      const topKpis: KpiConfig[] = [];
       for (const k of allKpiCands) {
         if (!seenKpiCols.has(k.col) && topKpis.length < 4) {
           seenKpiCols.add(k.col);
@@ -313,9 +334,9 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
              topCharts.push({
                id: `auto-chart-${Date.now()}-${topCharts.length}`,
                categoryCol: ic.catCol,
-               title: `${ic.valCol} by ${ic.catCol}`, 
+               title: ic.title || `${ic.valCol} by ${ic.catCol}`, 
                type: ic.type,
-               series: [{ id: `series-${Date.now()}`, sheetName: config.id, valueCol: ic.valCol, color: colors[0] }],
+               series: [{ id: `series-${Date.now()}`, sheetName: config.tableNameOverride || config.id, valueCol: ic.valCol, color: colors[0] }],
                x: (topCharts.length % 2) * 6, y: 2 + Math.floor(topCharts.length / 2) * 6, w: 6, h: 6
              });
              seenCombos.add(`${ic.catCol}-${ic.valCol}`);

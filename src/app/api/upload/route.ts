@@ -57,11 +57,13 @@ export async function POST(req: Request) {
     const sheetsToProcess = prepConfig || wb.SheetNames.map(name => ({
       id: name,
       originalSheetName: name,
+      tableNameOverride: undefined,
       headerRowIdx: undefined,
       dataEndRow: undefined,
       excludedRows: [],
       excludedCols: [],
-      columnTypes: {}
+      columnTypes: {},
+      columnRenames: {}
     }));
 
     for (const config of sheetsToProcess) {
@@ -109,6 +111,13 @@ export async function POST(req: Request) {
       // Filter excluded cols
       const headers = config.excludedCols ? headersMap.filter(h => !config.excludedCols.includes(h.name)) : headersMap;
 
+      // Apply renames
+      headers.forEach(h => {
+          if (config.columnRenames && config.columnRenames[h.name]) {
+              h.name = config.columnRenames[h.name];
+          }
+      });
+
       const records: any[] = [];
       const dataEndRow = config.dataEndRow !== undefined ? config.dataEndRow : (rawArray.length - 1);
       
@@ -132,8 +141,12 @@ export async function POST(req: Request) {
 
       // Infer column types, override with config if present
       const columns = headers.map(h => {
-        if (config.columnTypes && config.columnTypes[h.name]) {
-          return { name: h.name, type: config.columnTypes[h.name], isPrimary: false };
+        // Find original name from headersMap to check config.columnTypes
+        const originalHeader = headersMap.find(hm => hm.index === h.index);
+        const originalName = originalHeader ? originalHeader.name : h.name;
+
+        if (config.columnTypes && config.columnTypes[originalName]) {
+          return { name: h.name, type: config.columnTypes[originalName], isPrimary: false };
         }
 
         let numCount = 0, dateCount = 0, catCount = 0;
@@ -164,7 +177,7 @@ export async function POST(req: Request) {
           .from('data_tables')
           .insert({
               dataset_id: datasetId,
-              sheet_name: config.id, // Use config.id (which handles duplicated tabs)
+              sheet_name: config.tableNameOverride || config.id, // Use overridden name or ID
               table_name: dynamicTableName,
               columns,
               row_count: records.length
@@ -215,7 +228,7 @@ export async function POST(req: Request) {
 
           parsedSheets.push({
             id: tableId,
-            sheetName: config.id, // ID of the specific prep configuration
+            sheetName: config.tableNameOverride || config.id,
             tableName: dynamicTableName,
             columns,
             records: records.slice(0, 100),
@@ -229,7 +242,7 @@ export async function POST(req: Request) {
           // Fallback: Even if Postgres fails, we push the sheet for in-memory use!
           parsedSheets.push({
             id: tableId,
-            sheetName: config.id,
+            sheetName: config.tableNameOverride || config.id,
             tableName: dynamicTableName,
             columns,
             records: records.slice(0, 100),
