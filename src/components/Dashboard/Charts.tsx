@@ -4,7 +4,7 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { useDashboard, SheetAnalysis, ChartConfig, KpiConfig, DataRecord, Workspace, ChartSeries } from '@/context/DashboardContext';
 import { X, Plus, GripHorizontal, Edit2, Download, Trash, Trash2 } from 'lucide-react';
-import { Responsive, WidthProvider, Layout } from 'react-grid-layout/legacy';
+import { Responsive, WidthProvider } from 'react-grid-layout/legacy';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 
@@ -212,7 +212,7 @@ export const DashboardView = () => {
   const layoutCharts = ws.chartConfigs.map(c => ({ i: c.id, x: c.x ?? 0, y: c.y ?? 2, w: c.w ?? 6, h: c.h ?? 6 }));
   const layouts = { lg: [...layoutKpis, ...layoutCharts] };
 
-  const onLayoutChange = (currentLayout: Layout[]) => {
+  const onLayoutChange = (currentLayout: any[]) => {
     updateLayouts(currentLayout.map(l => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h })));
   };
 
