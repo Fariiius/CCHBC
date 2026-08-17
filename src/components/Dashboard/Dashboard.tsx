@@ -19,6 +19,10 @@ export const Dashboard = () => {
 
   const [activeTabId, setActiveTabId] = useState<string>('');
   const [draggedRowId, setDraggedRowId] = useState<string | null>(null);
+  
+  // Selection Engine
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [isDraggingSelection, setIsDraggingSelection] = useState(false);
 
   const activeConfig = stagingWorkspace?.configs.find(c => c.id === activeTabId) || (stagingWorkspace && stagingWorkspace.configs[0]);
 
@@ -355,15 +359,38 @@ export const Dashboard = () => {
                                 
                                 const col = headers.find(h => h.index === cIdx);
                                 const isColHidden = col && activeConfig.excludedCols?.includes(col.name);
+                                const isSelected = activeConfig.selectedCells?.includes(editKey);
                                 
                                 return (
-                                  <td key={cIdx} style={{ padding: 0, borderLeft: '1px solid var(--border)', maxWidth: 200, background: isColHidden ? '#f8f9fa' : 'transparent', opacity: isColHidden ? 0.4 : 1, transition: 'all 0.2s' }}>
+                                  <td 
+                                    key={cIdx} 
+                                    onMouseDown={() => {
+                                      if (!selectionMode) return;
+                                      setIsDraggingSelection(true);
+                                      updatePrepConfig(activeConfig.id, { selectedCells: [editKey] });
+                                    }}
+                                    onMouseEnter={() => {
+                                      if (!selectionMode || !isDraggingSelection) return;
+                                      updatePrepConfig(activeConfig.id, { selectedCells: [...(activeConfig.selectedCells || []), editKey] });
+                                    }}
+                                    onMouseUp={() => setIsDraggingSelection(false)}
+                                    style={{ 
+                                      padding: 0, 
+                                      borderLeft: '1px solid var(--border)', 
+                                      border: isSelected ? '2px solid var(--primary)' : undefined,
+                                      maxWidth: 200, 
+                                      background: isSelected ? 'rgba(244,0,9,0.1)' : (isColHidden ? '#f8f9fa' : 'transparent'), 
+                                      opacity: isColHidden ? 0.4 : 1, 
+                                      transition: 'all 0.1s',
+                                      userSelect: selectionMode ? 'none' : 'auto'
+                                    }}
+                                  >
                                     <input
                                       type="text"
                                       value={displayVal}
                                       onChange={e => updatePrepConfig(activeConfig.id, { cellEdits: { ...(activeConfig.cellEdits || {}), [editKey]: e.target.value } })}
-                                      style={{ width: '100%', padding: '0.6rem', border: 'none', background: 'transparent', outline: 'none', color: (isExcluded || isColHidden) ? '#9aa0a6' : 'inherit', cursor: (isExcluded || isColHidden) ? 'not-allowed' : 'text' }}
-                                      disabled={isExcluded || isColHidden}
+                                      style={{ width: '100%', padding: '0.6rem', border: 'none', background: 'transparent', outline: 'none', color: (isExcluded || isColHidden) ? '#9aa0a6' : 'inherit', cursor: selectionMode ? 'cell' : ((isExcluded || isColHidden) ? 'not-allowed' : 'text'), pointerEvents: selectionMode ? 'none' : 'auto' }}
+                                      disabled={isExcluded || isColHidden || selectionMode}
                                       placeholder={isOrig && cIdx < (activeConfig.rawPreview[0]?.length || 0) ? '' : 'Type...'}
                                     />
                                   </td>
@@ -375,6 +402,35 @@ export const Dashboard = () => {
                       </tbody>
                     </table>
                   </div>
+                </div>
+                
+                {/* Global Dashboard Filters */}
+                <div style={{ background: 'var(--surface)', padding: '1.5rem', borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: '1px solid var(--border)', marginTop: '1.5rem' }}>
+                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                     <Settings2 size={18} color="var(--primary)" />
+                     <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Explicit Global Filters</h3>
+                   </div>
+                   <p style={{ color: '#5f6368', fontSize: '0.85rem', marginBottom: '1.5rem', maxWidth: 800, lineHeight: 1.5 }}>
+                     Select which columns should be extracted as Global Sidebar Filters for the final dashboard.
+                   </p>
+                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      {headers.map(col => {
+                         const isFilter = activeConfig.explicitFilters?.includes(col.name);
+                         return (
+                           <button
+                             key={col.name}
+                             onClick={() => {
+                               const filters = activeConfig.explicitFilters || [];
+                               if (isFilter) updatePrepConfig(activeConfig.id, { explicitFilters: filters.filter(f => f !== col.name) });
+                               else updatePrepConfig(activeConfig.id, { explicitFilters: [...filters, col.name] });
+                             }}
+                             style={{ padding: '0.5rem 1rem', background: isFilter ? 'var(--primary-light)' : 'white', color: isFilter ? 'var(--primary)' : 'var(--foreground)', border: isFilter ? '1px solid var(--primary)' : '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}
+                           >
+                             {col.name}
+                           </button>
+                         )
+                      })}
+                   </div>
                 </div>
 
                 {/* Section 2: Column Types & Hiding */}

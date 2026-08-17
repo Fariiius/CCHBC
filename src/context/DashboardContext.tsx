@@ -36,6 +36,9 @@ export interface SheetPrepConfig {
   columnRenames?: Record<string, string>;
   addedCols?: number;
   rawPreview: any[][];
+  selectedCells: string[]; // Set of explicitly selected cells like "rowId_colIdx"
+  explicitFilters: string[]; // List of column names to act as dashboard sidebar filters
+  explicitKpis: { id: string, label: string, value: string }[];
   initialKpis?: { col: string, title: string }[];
   initialCharts?: { catCol: string, valCol: string, type: 'pie'|'bar'|'line', title?: string }[];
 }
@@ -193,8 +196,8 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
          columnRenames: {},
          addedCols: 0,
          rawPreview: s.rawPreview,
-         initialCharts: [],
-         initialKpis: []
+         selectedCells: [],
+         explicitFilters: []
       }));
       setStagingWorkspace({ configs });
     } catch (err: any) {
@@ -236,6 +239,9 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
         cellEdits: {},
         addedCols: 0,
         addedRows: {},
+        selectedCells: [],
+        explicitFilters: [],
+        explicitKpis: []
       };
       
       const targetIdx = prev.configs.findIndex(c => c.id === sheetId);
@@ -286,159 +292,55 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
         };
       });
 
-      // 0. User Pre-Configured KPIs
-      const topKpis: KpiConfig[] = [];
-      const seenKpiCols = new Set<string>();
-      
-      stagingWorkspace.configs.forEach(config => {
-        if (config.initialKpis) {
-           config.initialKpis.forEach(ik => {
-             topKpis.push({
-               id: `auto-kpi-${Date.now()}-${topKpis.length}`,
-               sheetName: config.tableNameOverride || config.id, // match the renamed table
-               col: ik.col,
-               x: topKpis.length * 3, y: 0, w: 3, h: 2
-             });
-             seenKpiCols.add(ik.col);
-           });
-        }
-      });
-
-      // Smart AI Ranking for KPIs
-      let allKpiCands: { sheet: string, col: string, score: number, val: number }[] = [];
-      const kpiKeywords = ['revenue', 'sales', 'profit', 'margin', 'volume', 'spend', 'saving', 'total', 'net', 'amount', 'qty', 'quantity', 'cost', 'target', 'actual', 'price', 'discount'];
-      
-      analyzed.forEach((sheet: SheetAnalysis) => {
-        sheet.numericCols.forEach(col => {
-          const total = sheet.records.reduce((s, r) => s + (Number(r[col]) || 0), 0);
-          let score = Math.abs(total);
-          const lcol = col.toLowerCase();
-          
-          // Strict ID detection: If every row has a unique number, it's likely an ID/Key
-          const uniqueNum = new Set(sheet.records.map(r => r[col])).size;
-          if (uniqueNum === sheet.records.length && sheet.records.length > 5) {
-             score -= 1e9; // Penalize ID columns heavily
-          }
-          if (total === 0) {
-             score -= 1e9; // Penalize empty/zero columns
-          }
-          
-          // AI Keyword Boosting
-          kpiKeywords.forEach((kw, i) => {
-             if (lcol.includes(kw)) {
-                 score += 10000;
-                 score *= Math.pow(10, 6 - Math.min(i, 4)); 
-             }
-          });
-          
-          allKpiCands.push({ sheet: sheet.name, col, score, val: total });
-        });
-      });
-      allKpiCands.sort((a, b) => b.score - a.score);
-      
-      for (const k of allKpiCands) {
-        if (k.score <= 0) continue; // Skip IDs or 0-sum columns
-        if (!seenKpiCols.has(k.col) && topKpis.length < 4) {
-          seenKpiCols.add(k.col);
-          topKpis.push({ 
-            id: `auto-kpi-${Date.now()}-${topKpis.length}`, 
-            sheetName: k.sheet, 
-            col: k.col,
-            x: topKpis.length * 3, y: 0, w: 3, h: 2
-          });
-        }
-      }
-
-      // Smart AI Ranking for Charts
-      let allChartCands: { sheet: string, cat: string, val: string, score: number, isDate: boolean, cardinality: number }[] = [];
-      const dateKeywords = ['month', 'date', 'year', 'day', 'quarter', 'period', 'week'];
-      const catKeywords = ['region', 'category', 'product', 'brand', 'channel', 'status', 'type', 'country', 'city', 'department'];
-
-      analyzed.forEach((sheet: SheetAnalysis) => {
-        const topNumCols = [...sheet.numericCols].slice(0, 5); // Consider more metrics
-        const usefulCatCols = [...sheet.categoricalCols, ...sheet.dateCols];
-
-        topNumCols.forEach(val => {
-          usefulCatCols.forEach(cat => {
-            let score = 0;
-            const lval = val.toLowerCase();
-            const lcat = cat.toLowerCase();
-            
-            // Cardinality calculation (how many unique values)
-            const uniqueValues = new Set(sheet.records.map(r => r[cat])).size;
-            
-            // Penalize high cardinality unless it's a date trend
-            const isDate = sheet.dateCols.includes(cat) || dateKeywords.some(kw => lcat.includes(kw));
-            if (isDate) {
-               score += 2000;
-            } else {
-               if (uniqueValues <= 1) score -= 5000; // Useless single-value category
-               else if (uniqueValues > 40) score -= 5000; // Too many categories for a chart
-               else if (uniqueValues >= 2 && uniqueValues <= 10) score += 2000; // Perfect for pie/bar
-               else if (uniqueValues > 10 && uniqueValues <= 40) score += 500; // Acceptable for bar
-            }
-            
-            kpiKeywords.forEach(kw => { if (lval.includes(kw)) score += 1000; });
-            catKeywords.forEach(kw => { if (lcat.includes(kw)) score += 800; });
-            dateKeywords.forEach(kw => { if (lcat.includes(kw)) score += 1200; }); // Trends are highly valuable
-
-            allChartCands.push({ sheet: sheet.name, cat, val, score, isDate, cardinality: uniqueValues });
-          });
-        });
-      });
-      allChartCands.sort((a, b) => b.score - a.score);
-
+      // The dashboard starts completely empty, waiting for the user to explicitly build it.
       const topCharts: ChartConfig[] = [];
-      const seenCombos = new Set<string>();
+      const topKpis: KpiConfig[] = [];
+      const masterFilters: Record<string, string[]> = {};
       const colors = ['#F40009', '#111111', '#555555', '#999999', '#D90008'];
-      
-      // 1. Add user pre-configured charts from Data Prep phase
+
       stagingWorkspace.configs.forEach(config => {
+        // Explicit Charts
         if (config.initialCharts) {
-           config.initialCharts.forEach(ic => {
+           config.initialCharts.forEach((ic, idx) => {
              topCharts.push({
-               id: `auto-chart-${Date.now()}-${topCharts.length}`,
+               id: `manual-chart-${Date.now()}-${idx}`,
                categoryCol: ic.catCol,
                title: ic.title || `${ic.valCol} by ${ic.catCol}`, 
                type: ic.type,
-               series: [{ id: `series-${Date.now()}`, sheetName: config.tableNameOverride || config.id, valueCol: ic.valCol, color: colors[0] }],
+               series: [{ id: `s-${Date.now()}`, sheetName: config.tableNameOverride || config.id, valueCol: ic.valCol, color: colors[idx % colors.length] }],
                x: (topCharts.length % 2) * 6, y: 2 + Math.floor(topCharts.length / 2) * 6, w: 6, h: 6
              });
-             seenCombos.add(`${ic.catCol}-${ic.valCol}`);
+           });
+        }
+        
+        // Explicit KPIs
+        if (config.explicitKpis) {
+           config.explicitKpis.forEach((ek, idx) => {
+             // Since this is a Raw KPI (literal text/number), we pass it as a special config.
+             // We can use a special sheetName or flag to tell KPICard to render raw value.
+             topKpis.push({
+               id: ek.id,
+               sheetName: 'RAW_MANUAL_KPI',
+               col: ek.label,
+               calcCol: ek.value, // We hijack calcCol to pass the raw value string
+               x: topKpis.length * 3, y: 0, w: 3, h: 2
+             });
+           });
+        }
+        
+        // Explicit Filters
+        if (config.explicitFilters) {
+           config.explicitFilters.forEach(f => {
+              masterFilters[f] = [];
            });
         }
       });
-      
-      for (const c of allChartCands) {
-        if (c.score <= 0) continue; // STRICT RULE: Skip anything that didn't score positively to prevent garbage charts
-        if (!seenCombos.has(`${c.cat}-${c.val}`) && topCharts.length < 5) {
-          seenCombos.add(`${c.cat}-${c.val}`);
-          
-          let chartType: 'bar'|'line'|'pie'|'doughnut' = 'bar';
-          if (c.isDate) chartType = 'line';
-          else if (c.cardinality <= 8 && topCharts.length % 2 !== 0) chartType = 'pie';
-          
-          topCharts.push({
-            id: `auto-chart-${Date.now()}-${topCharts.length}`,
-            categoryCol: c.cat,
-            title: `${c.val} by ${c.cat}`, 
-            type: chartType,
-            series: [{
-              id: `series-${Date.now()}`,
-              sheetName: c.sheet,
-              valueCol: c.val,
-              color: colors[0]
-            }],
-            x: (topCharts.length % 2) * 6, y: 2 + Math.floor(topCharts.length / 2) * 6, w: 6, h: 6
-          });
-        }
-      }
 
       setWorkspaces(prev => {
           const newId = `ws-${Date.now()}`;
           const newWs: Workspace = {
             id: newId, fileName: stagedFile.name, sheets: analyzed,
-            chartConfigs: topCharts, kpiConfigs: topKpis, masterFilters: {}, crossFilters: {}
+            chartConfigs: topCharts, kpiConfigs: topKpis, masterFilters: masterFilters, crossFilters: {}
           };
           setActiveWorkspaceId(newId);
           return [...prev, newWs];

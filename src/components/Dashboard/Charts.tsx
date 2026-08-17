@@ -51,32 +51,42 @@ export const FilterBar = () => {
   const hasCrossActive = Object.values(ws.crossFilters || {}).some(v => v.length > 0);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', padding: '0.4rem 1rem', background: 'var(--surface)', borderBottom: '1px solid var(--border)', flexShrink: 0, minHeight: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', width: '250px', padding: '1.5rem 1rem', background: 'white', borderRight: '1px solid var(--border)', flexShrink: 0, height: '100%', overflowY: 'auto' }}>
+      <h3 style={{ fontSize: '0.9rem', fontWeight: 800, marginBottom: '1rem', textTransform: 'uppercase', color: 'var(--primary)' }}>Filters</h3>
+      
       {filterableCols.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#5f6368', textTransform: 'uppercase', marginRight: '0.5rem' }}>Global Filters:</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.5rem' }}>
+          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#5f6368' }}>GLOBAL FILTERS</span>
           {filterableCols.map(({ col, values }) => {
             const active = ws.masterFilters[col] || [];
-            return values.map(val => (
-              <button key={`${col}-${val}`} onClick={() => toggleFilter(col, val)} style={{ padding: '0.2rem 0.6rem', borderRadius: 4, fontSize: '0.68rem', fontWeight: active.includes(val) ? 700 : 500, background: active.includes(val) ? 'var(--primary)' : '#e8eaed', color: active.includes(val) ? 'white' : '#3c4043', border: 'none', cursor: 'pointer', transition: 'all 0.1s' }}>
-                {val}
-              </button>
-            ));
+            return (
+              <div key={col} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginBottom: '0.75rem' }}>
+                <div style={{ fontSize: '0.7rem', fontWeight: 600, color: '#202124' }}>{col}</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                  {values.map(val => (
+                    <button key={`${col}-${val}`} onClick={() => toggleFilter(col, val)} style={{ padding: '0.25rem 0.5rem', borderRadius: 4, fontSize: '0.7rem', fontWeight: active.includes(val) ? 700 : 500, background: active.includes(val) ? 'var(--primary)' : '#f1f3f4', color: active.includes(val) ? 'white' : '#3c4043', border: 'none', cursor: 'pointer', transition: 'all 0.1s' }}>
+                      {val}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
           })}
-          {hasMasterActive && <button onClick={resetFilters} style={{ padding: '0.2rem 0.5rem', borderRadius: 4, fontSize: '0.68rem', fontWeight: 600, background: '#fce8e6', color: '#d93025', border: 'none', cursor: 'pointer' }}>✕ Clear</button>}
+          {hasMasterActive && <button onClick={resetFilters} style={{ padding: '0.4rem', borderRadius: 4, fontSize: '0.75rem', fontWeight: 600, background: '#fce8e6', color: '#d93025', border: 'none', cursor: 'pointer', width: '100%' }}>✕ Clear Global Filters</button>}
         </div>
       )}
+      
       {hasCrossActive && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', alignItems: 'center', marginTop: '0.5rem' }}>
-          <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#d93025', textTransform: 'uppercase', marginRight: '0.5rem' }}>Cross Filters:</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#d93025' }}>CROSS FILTERS</span>
           {Object.entries(ws.crossFilters).map(([col, vals]) => {
             return vals.map(val => (
-              <button key={`cross-${col}-${val}`} onClick={() => removeCrossFilter(col, val)} style={{ padding: '0.2rem 0.6rem', borderRadius: 4, fontSize: '0.68rem', fontWeight: 700, background: '#fce8e6', color: '#d93025', border: '1px solid #fad2e1', cursor: 'pointer', transition: 'all 0.1s', display: 'flex', alignItems: 'center', gap: 4 }}>
-                {col}: {val} <X size={10} />
+              <button key={`cross-${col}-${val}`} onClick={() => removeCrossFilter(col, val)} style={{ padding: '0.35rem 0.6rem', borderRadius: 4, fontSize: '0.7rem', fontWeight: 600, background: '#fce8e6', color: '#d93025', border: '1px solid #fad2e1', cursor: 'pointer', transition: 'all 0.1s', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>{col}: {val}</span> <X size={12} />
               </button>
             ));
           })}
-          <button onClick={clearCrossFilters} style={{ padding: '0.2rem 0.5rem', borderRadius: 4, fontSize: '0.68rem', fontWeight: 600, background: 'transparent', color: '#5f6368', border: 'none', cursor: 'pointer' }}>Clear All</button>
+          <button onClick={clearCrossFilters} style={{ padding: '0.4rem', borderRadius: 4, fontSize: '0.75rem', fontWeight: 600, background: 'transparent', color: '#5f6368', border: '1px solid #dadce0', cursor: 'pointer', width: '100%', marginTop: '0.25rem' }}>Clear All Cross Filters</button>
         </div>
       )}
     </div>
@@ -86,17 +96,22 @@ export const FilterBar = () => {
 // ── Components ──────────────────────────────────────────────────────────────
 const KPICard = ({ config, fallbackRecords, filters, onEdit }: { config: KpiConfig, fallbackRecords: any[], filters: any[], onEdit: () => void }) => {
   const [value, setValue] = useState<number | null>(null);
+  const [rawValue, setRawValue] = useState<string | null>(null);
   const [h, setH] = useState(false);
   const { removeKpi, openDrillDown, getFilteredRecords } = useDashboard();
 
   useEffect(() => {
+    if (config.sheetName === 'RAW_MANUAL_KPI') {
+       setRawValue(config.calcCol || '');
+       return;
+    }
     fetch('/api/query', {
       method: 'POST',
       body: JSON.stringify({ datasetId: 'mock', tableName: config.sheetName, value: config.col, calcCol: config.calcCol, calcOp: config.calcOp, type: 'kpi', filters, fallbackRecords })
     }).then(r => r.json()).then(data => setValue(data.result)).catch(console.error);
   }, [config, filters, fallbackRecords]);
 
-  let label = config.calcCol && config.calcOp ? `${config.col} ${config.calcOp} ${config.calcCol}` : `Sum of ${config.col}`;
+  let label = config.sheetName === 'RAW_MANUAL_KPI' ? config.col : (config.calcCol && config.calcOp ? `${config.col} ${config.calcOp} ${config.calcCol}` : `Sum of ${config.col}`);
 
   return (
     <div onMouseOver={() => setH(true)} onMouseOut={() => setH(false)} style={{ background: 'var(--surface)', border: '1px solid #e8eaed', borderRadius: 6, display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', overflow: 'hidden' }}>
@@ -105,11 +120,11 @@ const KPICard = ({ config, fallbackRecords, filters, onEdit }: { config: KpiConf
         <button onClick={onEdit} style={{ padding: 2, borderRadius: 4, color: '#94a3b8', background: 'transparent', border: 'none', cursor: 'pointer' }}><Edit2 size={12} /></button>
         <button onClick={() => removeKpi(config.id)} style={{ padding: 2, borderRadius: 4, color: '#94a3b8', background: 'transparent', border: 'none', cursor: 'pointer' }}><X size={12} /></button>
       </div>
-      <div onDoubleClick={() => openDrillDown(getFilteredRecords(config.sheetName))} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0.5rem', cursor: 'pointer' }}>
-        <div style={{ fontSize: '1.8rem', fontWeight: 800, color: (value !== null && value < 0) ? '#d93025' : 'var(--foreground)', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
-          {value !== null ? fmt(value, config.isPercentage) : '...'}
+      <div onDoubleClick={() => config.sheetName !== 'RAW_MANUAL_KPI' && openDrillDown(getFilteredRecords(config.sheetName))} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0.5rem', cursor: config.sheetName !== 'RAW_MANUAL_KPI' ? 'pointer' : 'default' }}>
+        <div style={{ fontSize: '1.8rem', fontWeight: 800, color: (value !== null && value < 0) ? '#d93025' : 'var(--foreground)', letterSpacing: '-0.02em', lineHeight: 1.1, textAlign: 'center' }}>
+          {rawValue !== null ? rawValue : (value !== null ? fmt(value, config.isPercentage) : '...')}
         </div>
-        <div style={{ fontSize: '0.65rem', color: '#5f6368', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600, textTransform: 'uppercase' }}>{label}</div>
+        <div style={{ fontSize: '0.65rem', color: '#5f6368', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600, textTransform: 'uppercase', textAlign: 'center' }}>{label}</div>
       </div>
     </div>
   );
@@ -240,21 +255,37 @@ export const DashboardView = () => {
   };
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-      <div style={{ display: 'flex', padding: '0.5rem 1rem', background: '#f1f3f4', borderBottom: '1px solid #e8eaed', gap: '0.5rem', justifyContent: 'flex-end' }}>
-         <button onClick={exportToPDF} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 4, padding: '0.3rem 0.6rem', fontSize: '0.7rem', fontWeight: 600, color: '#5f6368', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}><Download size={12}/> PDF Export</button>
-         <button onClick={() => setShowKpiModal(true)} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 4, padding: '0.3rem 0.6rem', fontSize: '0.7rem', fontWeight: 600, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', marginLeft: 'auto' }}><Plus size={12}/> KPI</button>
-         <button onClick={() => setShowChartModal(true)} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 4, padding: '0.3rem 0.6rem', fontSize: '0.7rem', fontWeight: 600, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}><Plus size={12}/> Chart</button>
-      </div>
-      <div ref={layoutRef} style={{ flex: 1, overflowY: 'auto', padding: '1rem', background: 'var(--background)' }}>
-        {/* @ts-ignore */}
-        <ResponsiveGridLayout className="layout" layouts={layouts} breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }} cols={{ lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }} rowHeight={60} onLayoutChange={onLayoutChange} draggableHandle=".drag-handle" margin={[12, 12]}>
-          {ws.kpiConfigs.map(k => {
-            const sheet = ws.sheets.find(s => s.name === k.sheetName);
-            return <div key={k.id}><KPICard config={k} fallbackRecords={sheet?.records || []} filters={filtersArr} onEdit={() => setShowKpiModal(k)} /></div>;
-          })}
-          {ws.chartConfigs.map(c => <div key={c.id}><GenericChart config={c} ws={ws} filters={filtersArr} onEdit={() => setShowChartModal(c)} /></div>)}
-        </ResponsiveGridLayout>
+    <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+      {/* Sidebar Filter */}
+      <FilterBar />
+      
+      {/* Main Dashboard Area */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0, position: 'relative' }}>
+        <div style={{ display: 'flex', padding: '0.5rem 1rem', background: '#f1f3f4', borderBottom: '1px solid #e8eaed', gap: '0.5rem', justifyContent: 'flex-end', zIndex: 10 }}>
+           <button onClick={exportToPDF} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 4, padding: '0.3rem 0.6rem', fontSize: '0.7rem', fontWeight: 600, color: '#5f6368', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}><Download size={12}/> PDF Export</button>
+           <button onClick={() => setShowKpiModal(true)} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 4, padding: '0.3rem 0.6rem', fontSize: '0.7rem', fontWeight: 600, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', marginLeft: 'auto' }}><Plus size={12}/> KPI</button>
+           <button onClick={() => setShowChartModal(true)} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 4, padding: '0.3rem 0.6rem', fontSize: '0.7rem', fontWeight: 600, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}><Plus size={12}/> Chart</button>
+        </div>
+        
+        {ws.kpiConfigs.length === 0 && ws.chartConfigs.length === 0 && (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--background)' }}>
+             <h2 style={{ color: '#5f6368', marginBottom: '0.5rem' }}>Dashboard is Empty</h2>
+             <p style={{ color: '#9aa0a6', maxWidth: 400, textAlign: 'center', marginBottom: '1.5rem' }}>
+                You removed AI auto-generation. Click the buttons above to manually add KPIs and Charts based on your Data Prep explicit mappings.
+             </p>
+          </div>
+        )}
+        
+        <div ref={layoutRef} style={{ flex: 1, overflowY: 'auto', padding: '1rem', background: 'var(--background)' }}>
+          {/* @ts-ignore */}
+          <ResponsiveGridLayout className="layout" layouts={layouts} breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }} cols={{ lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }} rowHeight={60} onLayoutChange={onLayoutChange} draggableHandle=".drag-handle" margin={[12, 12]}>
+            {ws.kpiConfigs.map(k => {
+              const sheet = ws.sheets.find(s => s.name === k.sheetName);
+              return <div key={k.id}><KPICard config={k} fallbackRecords={sheet?.records || []} filters={filtersArr} onEdit={() => setShowKpiModal(k)} /></div>;
+            })}
+            {ws.chartConfigs.map(c => <div key={c.id}><GenericChart config={c} ws={ws} filters={filtersArr} onEdit={() => setShowChartModal(c)} /></div>)}
+          </ResponsiveGridLayout>
+        </div>
       </div>
       {showKpiModal && <KpiModal initialConfig={typeof showKpiModal === 'object' ? showKpiModal : undefined} onClose={() => setShowKpiModal(false)} />}
       {showChartModal && <ChartModal initialConfig={typeof showChartModal === 'object' ? showChartModal : undefined} onClose={() => setShowChartModal(false)} />}
