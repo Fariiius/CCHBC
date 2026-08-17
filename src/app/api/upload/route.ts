@@ -204,6 +204,22 @@ export async function POST(req: Request) {
         
         return { name: h.name, type, isPrimary: false };
       });
+      // Sanitize records based on inferred types to ensure perfect charting and aggregation
+      records.forEach(r => {
+          columns.forEach(c => {
+              const val = r[c.name];
+              if (c.type === 'numeric') {
+                  const n = parseNumber(val);
+                  r[c.name] = n !== null ? n : 0;
+              } else if (c.type === 'text') {
+                  if (val === undefined || val === null || String(val).trim() === '') {
+                      r[c.name] = 'Unknown'; // Fixes 'undefined' categories in charts
+                  } else {
+                      r[c.name] = String(val).trim();
+                  }
+              }
+          });
+      });
 
       // Generate a dynamic table name
       const safeSheetName = config.id.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
