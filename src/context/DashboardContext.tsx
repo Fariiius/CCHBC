@@ -151,8 +151,21 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setWorkspaces(parsed);
-          setActiveWorkspaceId(parsed[parsed.length - 1].id);
+          const sanitizedWorkspaces = parsed.map((w: any) => ({
+            ...w,
+            masterFilters: w.masterFilters || {},
+            crossFilters: w.crossFilters || {},
+            chartConfigs: w.chartConfigs || [],
+            kpiConfigs: w.kpiConfigs || [],
+            sheets: (w.sheets || []).map((s: any) => ({
+              ...s,
+              categoricalCols: s.categoricalCols || [],
+              numericCols: s.numericCols || [],
+              dateCols: s.dateCols || []
+            }))
+          }));
+          setWorkspaces(sanitizedWorkspaces);
+          setActiveWorkspaceId(sanitizedWorkspaces[sanitizedWorkspaces.length - 1].id);
         }
       }
     } catch (e) { console.error('Failed to load workspaces from local storage', e); }

@@ -31,7 +31,7 @@ export const FilterBar = () => {
     if (!ws) return [];
     const map = new Map<string, Set<string>>();
     ws.sheets.forEach(sheet => {
-      [...sheet.categoricalCols, ...sheet.dateCols].forEach(col => {
+      [...(sheet.categoricalCols || []), ...(sheet.dateCols || [])].forEach(col => {
         const vals = new Set(sheet.records.map(r => String(r[col] ?? '')).filter(v => v && v !== 'undefined' && v !== 'null' && !v.toLowerCase().includes('total')));
         if (vals.size >= 2 && vals.size <= 20) {
           if (!map.has(col)) map.set(col, new Set());
@@ -47,7 +47,7 @@ export const FilterBar = () => {
 
   if (!ws) return null;
 
-  const hasMasterActive = Object.values(ws.masterFilters).some(v => v.length > 0);
+  const hasMasterActive = Object.values(ws.masterFilters || {}).some(v => v.length > 0);
   const hasCrossActive = Object.values(ws.crossFilters || {}).some(v => v.length > 0);
 
   return (
@@ -58,7 +58,7 @@ export const FilterBar = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.5rem' }}>
           <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#5f6368' }}>GLOBAL FILTERS</span>
           {filterableCols.map(({ col, values }) => {
-            const active = ws.masterFilters[col] || [];
+            const active = (ws.masterFilters || {})[col] || [];
             return (
               <div key={col} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginBottom: '0.75rem' }}>
                 <div style={{ fontSize: '0.7rem', fontWeight: 600, color: '#202124' }}>{col}</div>
