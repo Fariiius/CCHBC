@@ -139,7 +139,11 @@ const GenericChart = ({ config, ws, filters, onEdit }: { config: ChartConfig, ws
           map.get(d.category)[`value_${res.idx}`] = d.value;
         });
       });
-      let finalData = Array.from(map.values()).slice(0, 15);
+      let finalData = Array.from(map.values()).filter((d: any) => {
+        if (!d.name) return true;
+        const ln = String(d.name).toLowerCase().trim();
+        return !['total', 'grand total', 'subtotal', 'overall', 'all', 'sum'].includes(ln);
+      }).slice(0, 15);
       setData(finalData);
     }).catch(console.error);
   }, [config, filters, ws, seriesArr]);
