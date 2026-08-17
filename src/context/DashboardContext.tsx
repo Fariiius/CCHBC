@@ -24,6 +24,7 @@ export interface SheetPrepConfig {
   id: string;
   originalSheetName: string;
   tableNameOverride?: string;
+  rowOffset?: number;
   headerRowIdx: number;
   dataEndRow?: number;
   excludedRows: number[];
@@ -176,6 +177,8 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
       const configs: SheetPrepConfig[] = data.sheets.map((s: any) => ({
          id: s.id,
          originalSheetName: s.originalSheetName,
+         tableNameOverride: s.tableNameOverride,
+         rowOffset: s.rowOffset,
          headerRowIdx: s.defaultHeaderRowIdx,
          excludedRows: [],
          excludedCols: [],

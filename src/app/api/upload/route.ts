@@ -58,6 +58,7 @@ export async function POST(req: Request) {
       id: name,
       originalSheetName: name,
       tableNameOverride: undefined,
+      rowOffset: 0,
       headerRowIdx: undefined,
       dataEndRow: undefined,
       excludedRows: [],
@@ -86,6 +87,12 @@ export async function POST(req: Request) {
             headerRowIdx = i;
           }
         }
+      }
+      
+      // If config provided, add the rowOffset
+      const offset = config.rowOffset || 0;
+      if (headerRowIdx !== undefined) {
+         headerRowIdx += offset;
       }
       
       headerRowIdx = headerRowIdx || 0;
@@ -119,11 +126,12 @@ export async function POST(req: Request) {
       });
 
       const records: any[] = [];
-      const dataEndRow = config.dataEndRow !== undefined ? config.dataEndRow : (rawArray.length - 1);
+      const dataEndRow = config.dataEndRow !== undefined ? (config.dataEndRow + (config.rowOffset || 0)) : (rawArray.length - 1);
+      const excludedRowsMapped = (config.excludedRows || []).map((r: number) => r + (config.rowOffset || 0));
       
       for (let i = headerRowIdx + 1; i <= dataEndRow && i < rawArray.length; i++) {
         // Apply excluded rows from config
-        if (config.excludedRows && config.excludedRows.includes(i)) continue;
+        if (excludedRowsMapped.includes(i)) continue;
 
         const row = rawArray[i];
         if (!row || row.length === 0) continue;
