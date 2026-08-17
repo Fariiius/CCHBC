@@ -111,10 +111,9 @@ interface DashboardContextProps {
   clearCrossFilters: () => void;
   addChart: (config: Omit<ChartConfig, 'id' | 'x' | 'y' | 'w' | 'h'>) => void;
   removeChart: (id: string) => void;
-  updateChartLayout: (id: string, layout: {x: number, y: number, w: number, h: number}) => void;
   addKpi: (config: Omit<KpiConfig, 'id' | 'x' | 'y' | 'w' | 'h'>) => void;
   removeKpi: (id: string) => void;
-  updateKpiLayout: (id: string, layout: {x: number, y: number, w: number, h: number}) => void;
+  updateLayouts: (layouts: {i: string, x: number, y: number, w: number, h: number}[]) => void;
   getFilteredRecords: (sheetName: string) => DataRecord[];
   
   // Phase 3
@@ -510,10 +509,17 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     }));
   };
 
-  const updateKpiLayout = (id: string, layout: {x: number, y: number, w: number, h: number}) => {
+  const updateLayouts = (layouts: {i: string, x: number, y: number, w: number, h: number}[]) => {
     updateActiveWorkspace(ws => ({
       ...ws,
-      kpiConfigs: ws.kpiConfigs.map(k => k.id === id ? { ...k, ...layout } : k)
+      kpiConfigs: ws.kpiConfigs.map(c => {
+        const l = layouts.find(x => x.i === c.id);
+        return l ? { ...c, x: l.x, y: l.y, w: l.w, h: l.h } : c;
+      }),
+      chartConfigs: ws.chartConfigs.map(c => {
+        const l = layouts.find(x => x.i === c.id);
+        return l ? { ...c, x: l.x, y: l.y, w: l.w, h: l.h } : c;
+      })
     }));
   };
 
@@ -564,11 +570,20 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
       updatePrepConfig, duplicatePrepSheet, removePrepSheet,
       confirmStaging, cancelStaging,
       toggleFilter, resetFilters, 
-      addCrossFilter, removeCrossFilter, clearCrossFilters,
-      addChart, removeChart, updateChartLayout, updateChart,
-      addKpi, removeKpi, updateKpiLayout, updateKpi,
+      addCrossFilter,
+      removeCrossFilter,
+      clearCrossFilters,
+      addChart,
+      removeChart,
+      addKpi,
+      removeKpi,
+      updateLayouts,
       getFilteredRecords,
-      drillDownData, openDrillDown, closeDrillDown
+      drillDownData,
+      openDrillDown,
+      closeDrillDown,
+      updateChart,
+      updateKpi
     }}>
       {children}
     </DashboardContext.Provider>

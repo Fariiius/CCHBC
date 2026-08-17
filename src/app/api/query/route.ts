@@ -25,9 +25,9 @@ export async function POST(req: Request) {
             // 2. Aggregate
             
             if (type === 'kpi') {
-                let total = _.sumBy(filtered, (r: any) => Number(r[value]) || 0);
+                let total = value === 'COUNT(Rows)' ? filtered.length : _.sumBy(filtered, (r: any) => Number(r[value]) || 0);
                 if (calcCol && calcOp) {
-                    const valB = _.sumBy(filtered, (r: any) => Number(r[calcCol]) || 0);
+                    const valB = calcCol === 'COUNT(Rows)' ? filtered.length : _.sumBy(filtered, (r: any) => Number(r[calcCol]) || 0);
                     if (calcOp === '+') total = total + valB;
                     else if (calcOp === '-') total = total - valB;
                     else if (calcOp === '*') total = total * valB;
@@ -39,9 +39,9 @@ export async function POST(req: Request) {
             if (groupBy) {
                 const grouped = _.groupBy(filtered, groupBy);
                 const result = Object.entries(grouped).map(([category, records]) => {
-                    let sum = _.sumBy(records as any[], (r: any) => Number(r[value]) || 0);
+                    let sum = value === 'COUNT(Rows)' ? records.length : _.sumBy(records as any[], (r: any) => Number(r[value]) || 0);
                     if (calcCol && calcOp) {
-                        const valB = _.sumBy(records as any[], (r: any) => Number(r[calcCol]) || 0);
+                        const valB = calcCol === 'COUNT(Rows)' ? records.length : _.sumBy(records as any[], (r: any) => Number(r[calcCol]) || 0);
                         if (calcOp === '+') sum = sum + valB;
                         else if (calcOp === '-') sum = sum - valB;
                         else if (calcOp === '*') sum = sum * valB;

@@ -200,7 +200,7 @@ const GenericChart = ({ config, ws, filters, onEdit }: { config: ChartConfig, ws
 
 // ── Dashboard View ──────────────────────────────────────────────────────────
 export const DashboardView = () => {
-  const { workspaces, activeWorkspaceId, updateChartLayout, updateKpiLayout, drillDownData } = useDashboard();
+  const { workspaces, activeWorkspaceId, updateLayouts, drillDownData } = useDashboard();
   const ws = workspaces.find(w => w.id === activeWorkspaceId);
   const [showChartModal, setShowChartModal] = useState<boolean | ChartConfig>(false);
   const [showKpiModal, setShowKpiModal] = useState<boolean | KpiConfig>(false);
@@ -212,11 +212,8 @@ export const DashboardView = () => {
   const layoutCharts = ws.chartConfigs.map(c => ({ i: c.id, x: c.x ?? 0, y: c.y ?? 2, w: c.w ?? 6, h: c.h ?? 6 }));
   const layouts = { lg: [...layoutKpis, ...layoutCharts] };
 
-  const onLayoutChange = (currentLayout: Layout) => {
-    currentLayout.forEach(l => {
-      if (l.i.includes('kpi')) updateKpiLayout(l.i, { x: l.x, y: l.y, w: l.w, h: l.h });
-      else updateChartLayout(l.i, { x: l.x, y: l.y, w: l.w, h: l.h });
-    });
+  const onLayoutChange = (currentLayout: Layout[]) => {
+    updateLayouts(currentLayout.map(l => ({ i: l.i, x: l.x, y: l.y, w: l.w, h: l.h })));
   };
 
   const filtersArr: any[] = [];
@@ -286,10 +283,10 @@ const KpiModal = ({ onClose, initialConfig }: { onClose: () => void, initialConf
     <Overlay onClose={onClose}>
       <div style={{ fontWeight: 700, marginBottom: '1rem' }}>Add KPI Card</div>
       {sheets.length > 1 && <div style={{ marginBottom: 8 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Table</label><select value={sn} onChange={e => { setSn(e.target.value); setCol(''); setCalc(''); }} style={selStyle}>{sheets.map(x => <option key={x.name} value={x.name}>{x.name}</option>)}</select></div>}
-      <div style={{ marginBottom: 8 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Base Value</label><select value={col} onChange={e => setCol(e.target.value)} style={selStyle}><option value="">Select column...</option>{(s?.numericCols || []).map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+      <div style={{ marginBottom: 8 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Base Value</label><select value={col} onChange={e => setCol(e.target.value)} style={selStyle}><option value="">Select metric...</option><option value="COUNT(Rows)">COUNT(Rows)</option>{(s?.numericCols || []).map(c => <option key={c} value={c}>{c}</option>)}</select></div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
         <div style={{ width: 60 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Op</label><select value={op} onChange={e => setOp(e.target.value as any)} style={selStyle}><option value="+">+</option><option value="-">-</option><option value="*">*</option><option value="/">/</option></select></div>
-        <div style={{ flex: 1 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Second Value (Optional)</label><select value={calc} onChange={e => setCalc(e.target.value)} style={selStyle}><option value="">None</option>{(s?.numericCols || []).map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+        <div style={{ flex: 1 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Second Value (Optional)</label><select value={calc} onChange={e => setCalc(e.target.value)} style={selStyle}><option value="">None</option><option value="COUNT(Rows)">COUNT(Rows)</option>{(s?.numericCols || []).map(c => <option key={c} value={c}>{c}</option>)}</select></div>
       </div>
       <div style={{ marginBottom: 16 }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', color: '#3c4043', cursor: 'pointer' }}>
@@ -372,12 +369,12 @@ const ChartModal = ({ onClose, initialConfig }: { onClose: () => void, initialCo
                   </div>
                   <div style={{ flex: 1 }}>
                     <label style={{ fontSize: '0.6rem', color: '#5f6368', display: 'block', marginBottom: 2 }}>Metric</label>
-                    <select value={s.valueCol} onChange={e => updateSeries(idx, { valueCol: e.target.value })} style={{...selStyle, padding: '0.35rem'}}><option value="">Select...</option>{numCols.map(c => <option key={c} value={c}>{c}</option>)}</select>
+                    <select value={s.valueCol} onChange={e => updateSeries(idx, { valueCol: e.target.value })} style={{...selStyle, padding: '0.35rem'}}><option value="">Select metric...</option><option value="COUNT(Rows)">COUNT(Rows)</option>{numCols.map(c => <option key={c} value={c}>{c}</option>)}</select>
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <div style={{ width: 60 }}><label style={{ fontSize: '0.6rem', color: '#5f6368', display: 'block', marginBottom: 2 }}>Op</label><select value={s.calcOp || '/'} onChange={e => updateSeries(idx, { calcOp: e.target.value as any })} style={{...selStyle, padding: '0.35rem'}}><option value="+">+</option><option value="-">-</option><option value="*">*</option><option value="/">/</option></select></div>
-                  <div style={{ flex: 1 }}><label style={{ fontSize: '0.6rem', color: '#5f6368', display: 'block', marginBottom: 2 }}>Second Metric (Optional)</label><select value={s.calcCol || ''} onChange={e => updateSeries(idx, { calcCol: e.target.value })} style={{...selStyle, padding: '0.35rem'}}><option value="">None</option>{numCols.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+                  <div style={{ flex: 1 }}><label style={{ fontSize: '0.6rem', color: '#5f6368', display: 'block', marginBottom: 2 }}>Second Metric (Optional)</label><select value={s.calcCol || ''} onChange={e => updateSeries(idx, { calcCol: e.target.value })} style={{...selStyle, padding: '0.35rem'}}><option value="">None</option><option value="COUNT(Rows)">COUNT(Rows)</option>{numCols.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
                 </div>
               </div>
             );
