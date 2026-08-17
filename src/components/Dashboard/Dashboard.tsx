@@ -324,6 +324,12 @@ export const Dashboard = () => {
                                 ) : (
                                   <button onClick={() => updatePrepConfig(activeConfig.id, { headerRowId: rowId })} disabled={(activeConfig.excludedRowIds||[]).includes(rowId)} style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', cursor: (activeConfig.excludedRowIds||[]).includes(rowId) ? 'not-allowed' : 'pointer', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--foreground)' }}>Set Header</button>
                                 )}
+                                
+                                <button 
+                                  onClick={() => duplicatePrepSheet(activeConfig.id, rowId)}
+                                  style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', background: 'var(--primary-light)', color: 'var(--primary)', border: '1px solid var(--primary)', borderRadius: 4, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}
+                                  title="Extract a brand new table starting at this row"
+                                >Start Table Here</button>
 
                                 {isEndRow ? (
                                   <span style={{ color: '#d93025', fontWeight: 700, fontSize: '0.7rem', padding: '0.2rem 0.4rem', background: '#fad2e1', borderRadius: 4 }}>END</span>
