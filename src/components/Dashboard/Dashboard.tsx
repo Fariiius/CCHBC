@@ -107,7 +107,7 @@ export const Dashboard = () => {
                     }}
                   >
                     <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.85rem', fontWeight: activeTabId === config.id ? 700 : 500, color: activeTabId === config.id ? 'var(--primary)' : 'var(--foreground)' }}>
-                      {config.id}
+                      {config.tableNameOverride || config.id}
                     </div>
                     <div style={{ display: 'flex', gap: '0.25rem' }}>
                       <button 
