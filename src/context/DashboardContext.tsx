@@ -313,7 +313,22 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
            });
         }
         
-        // Explicit KPIs
+        // Pre-configured KPIs (from Section 4)
+        if (config.initialKpis) {
+           config.initialKpis.forEach((ik, idx) => {
+             topKpis.push({
+               id: `manual-kpi-${Date.now()}-${idx}`,
+               sheetName: config.tableNameOverride || config.id,
+               col: ik.col,
+               calcCol: '',
+               calcOp: undefined,
+               isPercentage: false,
+               x: topKpis.length * 3, y: 0, w: 3, h: 2
+             });
+           });
+        }
+
+        // Explicit KPIs (from Selection)
         if (config.explicitKpis) {
            config.explicitKpis.forEach((ek, idx) => {
              // Since this is a Raw KPI (literal text/number), we pass it as a special config.

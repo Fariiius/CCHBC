@@ -135,6 +135,16 @@ export const Dashboard = () => {
   if (workspaces.length === 0 && !stagingWorkspace) return <UploadZone />;
 
   if (stagingWorkspace) {
+    const handleAddRow = () => {
+      if (!activeConfig) return;
+      const newId = `custom_${Date.now()}`;
+      const newRows = { ...activeConfig.addedRows, [newId]: new Array((activeConfig.rawPreview[0]?.length || 0) + (activeConfig.addedCols || 0)).fill('') };
+      updatePrepConfig(activeConfig.id, { 
+         addedRows: newRows,
+         rowOrder: [newId, ...activeConfig.rowOrder] // Add to top for easy access
+      });
+    };
+
     // Derive headers for the active config based on its headerRowId
     let headers: { index: number, originalName: string, name: string }[] = [];
     if (activeConfig && activeConfig.headerRowId) {
@@ -148,7 +158,10 @@ export const Dashboard = () => {
       const counts: Record<string, number> = {};
 
       headerRow.forEach((h: any, i: number) => {
-        let val = (h !== undefined && h !== null && String(h).trim() !== '') ? String(h).trim() : `Column_${i + 1}`;
+        const cellKey = `${activeConfig.headerRowId}_${i}`;
+        const editedVal = activeConfig.cellEdits ? activeConfig.cellEdits[cellKey] : undefined;
+        let finalH = editedVal !== undefined ? editedVal : h;
+        let val = (finalH !== undefined && finalH !== null && String(finalH).trim() !== '') ? String(finalH).trim() : `Column_${i + 1}`;
         let finalName = val;
         if (counts[val]) {
           counts[val]++;
@@ -266,7 +279,25 @@ export const Dashboard = () => {
                             const col = headers.find(h => h.index === i);
                             const isHidden = col && activeConfig.excludedCols?.includes(col.name);
                             return (
-                              <th key={i} style={{ padding: '0.75rem', color: isHidden ? '#cbd5e1' : '#5f6368', fontWeight: 600, borderLeft: '1px solid var(--border)', background: isHidden ? '#f8f9fa' : 'transparent', opacity: isHidden ? 0.5 : 1 }}>Col {i + 1}</th>
+                              <th key={i} style={{ padding: '0.75rem', color: isHidden ? '#cbd5e1' : '#5f6368', fontWeight: 600, borderLeft: '1px solid var(--border)', background: isHidden ? '#f8f9fa' : 'transparent', opacity: isHidden ? 0.5 : 1 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>{col ? col.name : `Col ${i + 1}`}</span>
+                                   <button 
+                                      onClick={() => {
+                                         if (!col) return;
+                                         const ex = activeConfig.excludedCols || [];
+                                         if (ex.includes(col.name)) {
+                                            updatePrepConfig(activeConfig.id, { excludedCols: ex.filter(c => c !== col.name) });
+                                         } else {
+                                            updatePrepConfig(activeConfig.id, { excludedCols: [...ex, col.name] });
+                                         }
+                                      }}
+                                      style={{ padding: 2, background: 'transparent', border: 'none', cursor: 'pointer', color: isHidden ? '#5f6368' : '#d93025', display: 'flex', alignItems: 'center' }}
+                                   >
+                                      {isHidden ? <RefreshCw size={12} /> : <Trash2 size={12} />}
+                                   </button>
+                                </div>
+                              </th>
                             );
                           })}
                           {Array.from({ length: activeConfig.addedCols || 0 }).map((_, i) => {
@@ -274,7 +305,25 @@ export const Dashboard = () => {
                             const col = headers.find(h => h.index === cIdx);
                             const isHidden = col && activeConfig.excludedCols?.includes(col.name);
                             return (
-                              <th key={`added_${i}`} style={{ padding: '0.75rem', color: isHidden ? '#cbd5e1' : 'var(--primary)', fontWeight: 600, borderLeft: '1px solid var(--border)', background: isHidden ? '#f8f9fa' : 'transparent', opacity: isHidden ? 0.5 : 1 }}>Custom Col {i + 1}</th>
+                              <th key={`added_${i}`} style={{ padding: '0.75rem', color: isHidden ? '#cbd5e1' : 'var(--primary)', fontWeight: 600, borderLeft: '1px solid var(--border)', background: isHidden ? '#f8f9fa' : 'transparent', opacity: isHidden ? 0.5 : 1 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>{col ? col.name : `Custom Col ${i + 1}`}</span>
+                                   <button 
+                                      onClick={() => {
+                                         if (!col) return;
+                                         const ex = activeConfig.excludedCols || [];
+                                         if (ex.includes(col.name)) {
+                                            updatePrepConfig(activeConfig.id, { excludedCols: ex.filter(c => c !== col.name) });
+                                         } else {
+                                            updatePrepConfig(activeConfig.id, { excludedCols: [...ex, col.name] });
+                                         }
+                                      }}
+                                      style={{ padding: 2, background: 'transparent', border: 'none', cursor: 'pointer', color: isHidden ? '#5f6368' : '#d93025', display: 'flex', alignItems: 'center' }}
+                                   >
+                                      {isHidden ? <RefreshCw size={12} /> : <Trash2 size={12} />}
+                                   </button>
+                                </div>
+                              </th>
                             );
                           })}
                           <th style={{ padding: '0.75rem', textAlign: 'right' }}>
