@@ -22,6 +22,7 @@ export const Dashboard = () => {
   
   // Selection Engine
   const [selectionMode, setSelectionMode] = useState(false);
+  const [localSelectedCells, setLocalSelectedCells] = useState<string[]>([]);
   const [isDraggingSelection, setIsDraggingSelection] = useState(false);
 
   const activeConfig = stagingWorkspace?.configs.find(c => c.id === activeTabId) || (stagingWorkspace && stagingWorkspace.configs[0]);
@@ -408,7 +409,7 @@ export const Dashboard = () => {
                                 
                                 const col = headers.find(h => h.index === cIdx);
                                 const isColHidden = col && activeConfig.excludedCols?.includes(col.name);
-                                const isSelected = activeConfig.selectedCells?.includes(editKey);
+                                const isSelected = localSelectedCells.includes(editKey);
                                 
                                 return (
                                   <td 
@@ -416,11 +417,13 @@ export const Dashboard = () => {
                                     onMouseDown={() => {
                                       if (!selectionMode) return;
                                       setIsDraggingSelection(true);
-                                      updatePrepConfig(activeConfig.id, { selectedCells: [editKey] });
+                                      setLocalSelectedCells([editKey]);
                                     }}
                                     onMouseEnter={() => {
                                       if (!selectionMode || !isDraggingSelection) return;
-                                      updatePrepConfig(activeConfig.id, { selectedCells: [...(activeConfig.selectedCells || []), editKey] });
+                                      if (!localSelectedCells.includes(editKey)) {
+                                        setLocalSelectedCells(prev => [...prev, editKey]);
+                                      }
                                     }}
                                     onMouseUp={() => setIsDraggingSelection(false)}
                                     style={{ 
@@ -452,6 +455,44 @@ export const Dashboard = () => {
                     </table>
                   </div>
                 </div>
+                
+                {/* Selection Action Bar */}
+                {selectionMode && localSelectedCells.length > 0 && (
+                  <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', background: 'var(--surface)', padding: '1rem', borderRadius: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.15)', border: '1px solid var(--border)', display: 'flex', gap: '1rem', zIndex: 100, alignItems: 'center' }}>
+                     <span style={{ fontWeight: 600, fontSize: '0.8rem' }}>{localSelectedCells.length} cells selected</span>
+                     <button
+                        onClick={() => {
+                           const label = prompt('Enter KPI Name (e.g. Total Revenue):', 'Manual KPI');
+                           if (!label) return;
+                           
+                           const vals = localSelectedCells.map(sc => {
+                              const [rId, cIdxStr] = sc.split('_');
+                              const cIdx = parseInt(cIdxStr);
+                              const origIdx = rId.startsWith('orig_') ? parseInt(rId.replace('orig_', '')) : -1;
+                              const row = rId.startsWith('orig_') ? activeConfig.rawPreview[origIdx] : activeConfig.addedRows[rId];
+                              const cellVal = activeConfig.cellEdits && activeConfig.cellEdits[sc] !== undefined ? activeConfig.cellEdits[sc] : (row ? row[cIdx] : 0);
+                              return cellVal;
+                           });
+                           
+                           // Try to sum if numeric
+                           let finalValStr = vals.join(', ');
+                           const numVals = vals.map(v => Number(String(v).replace(/[^0-9.-]+/g,"")));
+                           if (numVals.every(n => !isNaN(n))) {
+                              finalValStr = numVals.reduce((a,b) => a+b, 0).toString();
+                           }
+                           
+                           const newKpis = [...(activeConfig.explicitKpis || []), { id: `ekpi-${Date.now()}`, label, value: finalValStr }];
+                           updatePrepConfig(activeConfig.id, { explicitKpis: newKpis });
+                           setSelectionMode(false);
+                           setLocalSelectedCells([]);
+                        }}
+                        style={{ padding: '0.5rem 1rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: 6, fontWeight: 600, cursor: 'pointer' }}
+                     >
+                        Create KPI from Selection
+                     </button>
+                     <button onClick={() => { setSelectionMode(false); setLocalSelectedCells([]); }} style={{ padding: '0.5rem 1rem', background: 'transparent', color: '#5f6368', border: '1px solid var(--border)', borderRadius: 6, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+                  </div>
+                )}
                 
                 {/* Global Dashboard Filters */}
                 <div style={{ background: 'var(--surface)', padding: '1.5rem', borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: '1px solid var(--border)', marginTop: '1.5rem' }}>
