@@ -3,8 +3,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { useDashboard, SheetAnalysis, ChartConfig, KpiConfig, DataRecord, Workspace, ChartSeries } from '@/context/DashboardContext';
-import { X, Plus, GripHorizontal, Edit2, Download, Trash, Trash2, Sparkles } from 'lucide-react';
-import { CopilotSidebar } from '@/components/Dashboard/CopilotSidebar';
+import { X, Plus, GripHorizontal, Edit2, Download, Trash, Trash2 } from 'lucide-react';
 import { Responsive, WidthProvider } from 'react-grid-layout/legacy';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -205,7 +204,6 @@ export const DashboardView = () => {
   const ws = workspaces.find(w => w.id === activeWorkspaceId);
   const [showChartModal, setShowChartModal] = useState<boolean | ChartConfig>(false);
   const [showKpiModal, setShowKpiModal] = useState<boolean | KpiConfig>(false);
-  const [showCopilot, setShowCopilot] = useState(false);
   const layoutRef = useRef<HTMLDivElement>(null);
 
   if (!ws) return null;
@@ -238,26 +236,22 @@ export const DashboardView = () => {
   };
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'row', overflow: 'hidden' }}>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-        <div style={{ display: 'flex', padding: '0.5rem 1rem', background: '#f1f3f4', borderBottom: '1px solid #e8eaed', gap: '0.5rem', justifyContent: 'flex-end' }}>
-           <button onClick={exportToPDF} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 4, padding: '0.3rem 0.6rem', fontSize: '0.7rem', fontWeight: 600, color: '#5f6368', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}><Download size={12}/> PDF Export</button>
-           <button onClick={() => setShowCopilot(!showCopilot)} style={{ background: 'linear-gradient(135deg, #1a73e8, #9333ea)', border: 'none', borderRadius: 4, padding: '0.3rem 0.6rem', fontSize: '0.7rem', fontWeight: 700, color: 'white', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', marginLeft: 'auto' }}><Sparkles size={12}/> AI Copilot</button>
-           <button onClick={() => setShowKpiModal(true)} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 4, padding: '0.3rem 0.6rem', fontSize: '0.7rem', fontWeight: 600, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}><Plus size={12}/> KPI</button>
-           <button onClick={() => setShowChartModal(true)} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 4, padding: '0.3rem 0.6rem', fontSize: '0.7rem', fontWeight: 600, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}><Plus size={12}/> Chart</button>
-        </div>
-        <div ref={layoutRef} style={{ flex: 1, overflowY: 'auto', padding: '1rem', background: 'var(--background)' }}>
-          {/* @ts-ignore */}
-          <ResponsiveGridLayout className="layout" layouts={layouts} breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }} cols={{ lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }} rowHeight={60} onLayoutChange={onLayoutChange} draggableHandle=".drag-handle" margin={[12, 12]}>
-            {ws.kpiConfigs.map(k => {
-              const sheet = ws.sheets.find(s => s.name === k.sheetName);
-              return <div key={k.id}><KPICard config={k} fallbackRecords={sheet?.records || []} filters={filtersArr} onEdit={() => setShowKpiModal(k)} /></div>;
-            })}
-            {ws.chartConfigs.map(c => <div key={c.id}><GenericChart config={c} ws={ws} filters={filtersArr} onEdit={() => setShowChartModal(c)} /></div>)}
-          </ResponsiveGridLayout>
-        </div>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
+      <div style={{ display: 'flex', padding: '0.5rem 1rem', background: '#f1f3f4', borderBottom: '1px solid #e8eaed', gap: '0.5rem', justifyContent: 'flex-end' }}>
+         <button onClick={exportToPDF} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 4, padding: '0.3rem 0.6rem', fontSize: '0.7rem', fontWeight: 600, color: '#5f6368', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}><Download size={12}/> PDF Export</button>
+         <button onClick={() => setShowKpiModal(true)} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 4, padding: '0.3rem 0.6rem', fontSize: '0.7rem', fontWeight: 600, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', marginLeft: 'auto' }}><Plus size={12}/> KPI</button>
+         <button onClick={() => setShowChartModal(true)} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 4, padding: '0.3rem 0.6rem', fontSize: '0.7rem', fontWeight: 600, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}><Plus size={12}/> Chart</button>
       </div>
-      {showCopilot && <CopilotSidebar onClose={() => setShowCopilot(false)} />}
+      <div ref={layoutRef} style={{ flex: 1, overflowY: 'auto', padding: '1rem', background: 'var(--background)' }}>
+        {/* @ts-ignore */}
+        <ResponsiveGridLayout className="layout" layouts={layouts} breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }} cols={{ lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }} rowHeight={60} onLayoutChange={onLayoutChange} draggableHandle=".drag-handle" margin={[12, 12]}>
+          {ws.kpiConfigs.map(k => {
+            const sheet = ws.sheets.find(s => s.name === k.sheetName);
+            return <div key={k.id}><KPICard config={k} fallbackRecords={sheet?.records || []} filters={filtersArr} onEdit={() => setShowKpiModal(k)} /></div>;
+          })}
+          {ws.chartConfigs.map(c => <div key={c.id}><GenericChart config={c} ws={ws} filters={filtersArr} onEdit={() => setShowChartModal(c)} /></div>)}
+        </ResponsiveGridLayout>
+      </div>
       {showKpiModal && <KpiModal initialConfig={typeof showKpiModal === 'object' ? showKpiModal : undefined} onClose={() => setShowKpiModal(false)} />}
       {showChartModal && <ChartModal initialConfig={typeof showChartModal === 'object' ? showChartModal : undefined} onClose={() => setShowChartModal(false)} />}
       {drillDownData && <DrillDownModal />}

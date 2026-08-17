@@ -304,17 +304,24 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
         }
       });
 
-      // Smart Ranking for KPIs
+      // Smart AI Ranking for KPIs
       let allKpiCands: { sheet: string, col: string, score: number, val: number }[] = [];
+      const kpiKeywords = ['revenue', 'sales', 'profit', 'margin', 'volume', 'spend', 'saving', 'total', 'net', 'amount', 'qty', 'quantity', 'cost', 'target', 'actual', 'price', 'discount'];
+      
       analyzed.forEach((sheet: SheetAnalysis) => {
         sheet.numericCols.forEach(col => {
           const total = sheet.records.reduce((s, r) => s + (Number(r[col]) || 0), 0);
           let score = Math.abs(total);
           const lcol = col.toLowerCase();
-          if (lcol.includes('spend')) score *= 1e6;
-          if (lcol.includes('saving')) score *= 1e6;
-          if (lcol.includes('total')) score *= 1e5;
-          if (lcol.includes('net')) score *= 1e4;
+          
+          // AI Keyword Boosting
+          kpiKeywords.forEach((kw, i) => {
+             if (lcol.includes(kw)) {
+                 // Higher priority for items earlier in the array (e.g. revenue, sales)
+                 score *= Math.pow(10, 6 - Math.min(i, 4)); 
+             }
+          });
+          
           allKpiCands.push({ sheet: sheet.name, col, score, val: total });
         });
       });
@@ -332,18 +339,26 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
         }
       }
 
-      // Smart Ranking for Charts
+      // Smart AI Ranking for Charts
       let allChartCands: { sheet: string, cat: string, val: string, score: number, isDate: boolean }[] = [];
+      const dateKeywords = ['month', 'date', 'year', 'day', 'quarter', 'period', 'week'];
+      const catKeywords = ['region', 'category', 'product', 'brand', 'channel', 'status', 'type', 'country', 'city', 'department'];
+
       analyzed.forEach((sheet: SheetAnalysis) => {
-        const topNumCols = [...sheet.numericCols].slice(0, 3);
+        const topNumCols = [...sheet.numericCols].slice(0, 5); // Consider more metrics
         const usefulCatCols = [...sheet.categoricalCols, ...sheet.dateCols];
 
         topNumCols.forEach(val => {
           usefulCatCols.forEach(cat => {
             let score = 0;
-            if (val.toLowerCase().includes('spend')) score += 1000;
-            if (cat.toLowerCase().includes('month')) score += 500;
-            const isDate = sheet.dateCols.includes(cat) || cat.toLowerCase().includes('month') || cat.toLowerCase().includes('date');
+            const lval = val.toLowerCase();
+            const lcat = cat.toLowerCase();
+            
+            kpiKeywords.forEach(kw => { if (lval.includes(kw)) score += 1000; });
+            catKeywords.forEach(kw => { if (lcat.includes(kw)) score += 800; });
+            dateKeywords.forEach(kw => { if (lcat.includes(kw)) score += 1200; }); // Trends are highly valuable
+
+            const isDate = sheet.dateCols.includes(cat) || dateKeywords.some(kw => lcat.includes(kw));
             allChartCands.push({ sheet: sheet.name, cat, val, score, isDate });
           });
         });
@@ -379,7 +394,7 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
             id: `auto-chart-${Date.now()}-${topCharts.length}`,
             categoryCol: c.cat,
             title: `${c.val} by ${c.cat}`, 
-            type: c.isDate ? 'line' : 'pie',
+            type: c.isDate ? 'line' : (topCharts.length % 2 === 0 ? 'bar' : 'pie'),
             series: [{
               id: `series-${Date.now()}`,
               sheetName: c.sheet,
