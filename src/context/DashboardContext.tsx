@@ -314,10 +314,19 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
           let score = Math.abs(total);
           const lcol = col.toLowerCase();
           
+          // Strict ID detection: If every row has a unique number, it's likely an ID/Key
+          const uniqueNum = new Set(sheet.records.map(r => r[col])).size;
+          if (uniqueNum === sheet.records.length && sheet.records.length > 5) {
+             score -= 1e9; // Penalize ID columns heavily
+          }
+          if (total === 0) {
+             score -= 1e9; // Penalize empty/zero columns
+          }
+          
           // AI Keyword Boosting
           kpiKeywords.forEach((kw, i) => {
              if (lcol.includes(kw)) {
-                 // Higher priority for items earlier in the array (e.g. revenue, sales)
+                 score += 10000;
                  score *= Math.pow(10, 6 - Math.min(i, 4)); 
              }
           });
@@ -328,6 +337,7 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
       allKpiCands.sort((a, b) => b.score - a.score);
       
       for (const k of allKpiCands) {
+        if (k.score <= 0) continue; // Skip IDs or 0-sum columns
         if (!seenKpiCols.has(k.col) && topKpis.length < 4) {
           seenKpiCols.add(k.col);
           topKpis.push({ 
@@ -362,7 +372,8 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
             if (isDate) {
                score += 2000;
             } else {
-               if (uniqueValues > 40) score -= 5000; // Too many categories for a chart
+               if (uniqueValues <= 1) score -= 5000; // Useless single-value category
+               else if (uniqueValues > 40) score -= 5000; // Too many categories for a chart
                else if (uniqueValues >= 2 && uniqueValues <= 10) score += 2000; // Perfect for pie/bar
                else if (uniqueValues > 10 && uniqueValues <= 40) score += 500; // Acceptable for bar
             }
@@ -399,7 +410,7 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
       });
       
       for (const c of allChartCands) {
-        if (c.score < -1000) continue; // Skip terrible charts (e.g. IDs)
+        if (c.score <= 0) continue; // STRICT RULE: Skip anything that didn't score positively to prevent garbage charts
         if (!seenCombos.has(`${c.cat}-${c.val}`) && topCharts.length < 5) {
           seenCombos.add(`${c.cat}-${c.val}`);
           
