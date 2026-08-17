@@ -5,7 +5,7 @@ import { useDashboard, SheetPrepConfig } from '@/context/DashboardContext';
 import { Header } from '@/components/Header/Header';
 import dynamic from 'next/dynamic';
 import { UploadZone } from '@/components/Upload/UploadZone';
-import { Loader2, Trash2, Copy, Eye, EyeOff, LayoutTemplate, Settings2, Trash, RefreshCw, PieChart } from 'lucide-react';
+import { Loader2, Trash2, Copy, Eye, EyeOff, LayoutTemplate, Settings2, Trash, RefreshCw, PieChart, ArrowDownToLine } from 'lucide-react';
 
 const DashboardView = dynamic(() => import('@/components/Dashboard/Charts').then(mod => mod.DashboardView), { ssr: false });
 const FilterBar = dynamic(() => import('@/components/Dashboard/Charts').then(mod => mod.FilterBar), { ssr: false });
@@ -72,6 +72,12 @@ export const Dashboard = () => {
         }
         headers.push({ index: i, originalName: val, name: finalName });
       });
+      
+      // Append added columns
+      for (let i = 0; i < (activeConfig.addedCols || 0); i++) {
+         let val = `Custom Col ${i+1}`;
+         headers.push({ index: headerRow.length + i, originalName: val, name: val });
+      }
     }
 
     return (
@@ -113,7 +119,7 @@ export const Dashboard = () => {
                       <button 
                         onClick={(e) => { e.stopPropagation(); duplicatePrepSheet(config.id); }}
                         style={{ padding: '0.25rem', background: 'transparent', border: 'none', cursor: 'pointer', color: '#5f6368', borderRadius: 4 }}
-                        title="Duplicate Table"
+                        title="Extract another table from this sheet"
                       ><Copy size={14} /></button>
                       {stagingWorkspace.configs.length > 1 && (
                         <button 
@@ -170,6 +176,15 @@ export const Dashboard = () => {
                           {activeConfig.rawPreview[0]?.map((_, i) => (
                             <th key={i} style={{ padding: '0.75rem', color: '#5f6368', fontWeight: 600, borderLeft: '1px solid var(--border)' }}>Col {i+1}</th>
                           ))}
+                          {Array.from({ length: activeConfig.addedCols || 0 }).map((_, i) => (
+                            <th key={`added_${i}`} style={{ padding: '0.75rem', color: 'var(--primary)', fontWeight: 600, borderLeft: '1px solid var(--border)' }}>Custom Col {i+1}</th>
+                          ))}
+                          <th style={{ padding: '0.75rem', textAlign: 'right' }}>
+                             <button 
+                               onClick={() => updatePrepConfig(activeConfig.id, { addedCols: (activeConfig.addedCols || 0) + 1 })}
+                               style={{ padding: '0.25rem 0.5rem', background: 'var(--primary-light)', color: 'var(--primary)', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600, fontSize: '0.75rem' }}
+                             >+ Col</button>
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
@@ -212,17 +227,113 @@ export const Dashboard = () => {
                                 ) : (
                                   <button onClick={() => updatePrepConfig(activeConfig.id, { dataEndRow: activeConfig.dataEndRow === idx ? undefined : idx })} disabled={activeConfig.excludedRows.includes(idx) || idx <= activeConfig.headerRowIdx} style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', cursor: (activeConfig.excludedRows.includes(idx) || idx <= activeConfig.headerRowIdx) ? 'not-allowed' : 'pointer', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--foreground)' }}>Set End</button>
                                 )}
+                                <button 
+                                  onClick={() => updatePrepConfig(activeConfig.id, { dataEndRow: idx })}
+                                  style={{ padding: 4, background: isEndRow ? 'var(--primary)' : 'transparent', color: isEndRow ? 'white' : '#5f6368', border: 'none', cursor: 'pointer', borderRadius: 4 }}
+                                  title="Set End Row"
+                                ><ArrowDownToLine size={16} /></button>
                               </td>
-                              {row.map((cell, cIdx) => (
-                                <td key={cIdx} style={{ padding: '0.5rem 0.75rem', borderLeft: '1px solid var(--border)', color: isHeader ? 'var(--primary)' : 'var(--foreground)', fontWeight: isHeader ? 600 : 400 }}>
-                                  {String(cell ?? '')}
-                                </td>
-                              ))}
+                              {row.map((cell: any, cIdx: number) => {
+                                const editKey = `${idx}_${cIdx}`;
+                                const displayVal = activeConfig.cellEdits && activeConfig.cellEdits[editKey] !== undefined ? activeConfig.cellEdits[editKey] : (cell !== undefined && cell !== null ? String(cell) : '');
+                                return (
+                                  <td key={cIdx} style={{ padding: 0, borderLeft: '1px solid var(--border)', maxWidth: 200 }}>
+                                    <input 
+                                      type="text" 
+                                      value={displayVal}
+                                      onChange={(e) => {
+                                         const edits = { ...(activeConfig.cellEdits || {}) };
+                                         edits[editKey] = e.target.value;
+                                         updatePrepConfig(activeConfig.id, { cellEdits: edits });
+                                      }}
+                                      style={{ width: '100%', height: '100%', padding: '0.5rem 0.75rem', border: 'none', outline: 'none', background: 'transparent', fontSize: '0.8rem', color: isExcluded ? '#9ca3af' : 'var(--foreground)' }}
+                                    />
+                                  </td>
+                                );
+                              })}
+                              {Array.from({ length: activeConfig.addedCols || 0 }).map((_, cIdx) => {
+                                const editKey = `${idx}_added_${cIdx}`;
+                                const displayVal = activeConfig.cellEdits && activeConfig.cellEdits[editKey] !== undefined ? activeConfig.cellEdits[editKey] : '';
+                                return (
+                                  <td key={`added_${cIdx}`} style={{ padding: 0, borderLeft: '1px solid var(--border)', maxWidth: 200 }}>
+                                    <input 
+                                      type="text" 
+                                      value={displayVal}
+                                      onChange={(e) => {
+                                         const edits = { ...(activeConfig.cellEdits || {}) };
+                                         edits[editKey] = e.target.value;
+                                         updatePrepConfig(activeConfig.id, { cellEdits: edits });
+                                      }}
+                                      style={{ width: '100%', height: '100%', padding: '0.5rem 0.75rem', border: 'none', outline: 'none', background: '#f8f9fa', fontSize: '0.8rem', color: 'var(--primary)' }}
+                                    />
+                                  </td>
+                                );
+                              })}
+                              <td></td>
                             </tr>
                           );
                         })}
+                        
+                        {/* Render Added Rows */}
+                        {(activeConfig.addedRows || []).map((addedRow, aIdx) => {
+                           const virtualIdx = activeConfig.rawPreview.length + aIdx;
+                           return (
+                             <tr key={`added_${aIdx}`} style={{ background: '#fdfaeb', borderBottom: '1px solid var(--border)' }}>
+                               <td style={{ padding: '0.5rem 0.75rem' }}>
+                                 <button 
+                                   onClick={() => {
+                                      const newRows = [...(activeConfig.addedRows || [])];
+                                      newRows.splice(aIdx, 1);
+                                      updatePrepConfig(activeConfig.id, { addedRows: newRows });
+                                   }}
+                                   style={{ padding: 4, background: 'transparent', border: 'none', cursor: 'pointer', color: '#d93025' }}
+                                   title="Delete Inserted Row"
+                                 ><Trash size={16} /></button>
+                               </td>
+                               {activeConfig.rawPreview[0]?.map((_, cIdx) => (
+                                  <td key={cIdx} style={{ padding: 0, borderLeft: '1px solid var(--border)' }}>
+                                    <input 
+                                      type="text" 
+                                      value={addedRow[cIdx] || ''}
+                                      onChange={(e) => {
+                                         const newRows = [...(activeConfig.addedRows || [])];
+                                         newRows[aIdx][cIdx] = e.target.value;
+                                         updatePrepConfig(activeConfig.id, { addedRows: newRows });
+                                      }}
+                                      style={{ width: '100%', height: '100%', padding: '0.5rem 0.75rem', border: 'none', outline: 'none', background: 'transparent', fontSize: '0.8rem' }}
+                                    />
+                                  </td>
+                               ))}
+                               {Array.from({ length: activeConfig.addedCols || 0 }).map((_, cIdx) => (
+                                  <td key={`added_col_${cIdx}`} style={{ padding: 0, borderLeft: '1px solid var(--border)' }}>
+                                    <input 
+                                      type="text" 
+                                      value={addedRow[activeConfig.rawPreview[0]?.length + cIdx] || ''}
+                                      onChange={(e) => {
+                                         const newRows = [...(activeConfig.addedRows || [])];
+                                         newRows[aIdx][activeConfig.rawPreview[0]?.length + cIdx] = e.target.value;
+                                         updatePrepConfig(activeConfig.id, { addedRows: newRows });
+                                      }}
+                                      style={{ width: '100%', height: '100%', padding: '0.5rem 0.75rem', border: 'none', outline: 'none', background: 'transparent', fontSize: '0.8rem' }}
+                                    />
+                                  </td>
+                               ))}
+                               <td></td>
+                             </tr>
+                           )
+                        })}
                       </tbody>
                     </table>
+                  </div>
+                  
+                  <div style={{ marginTop: '1rem' }}>
+                     <button 
+                       onClick={() => {
+                          const newRows = [...(activeConfig.addedRows || []), []];
+                          updatePrepConfig(activeConfig.id, { addedRows: newRows });
+                       }}
+                       style={{ padding: '0.5rem 1rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}
+                     >+ Insert Row</button>
                   </div>
                 </div>
 

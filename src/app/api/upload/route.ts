@@ -115,6 +115,14 @@ export async function POST(req: Request) {
           headersMap.push({ index: i, name });
       });
 
+      // Append added cols
+      for (let i = 0; i < (config.addedCols || 0); i++) {
+         let name = `Custom Col ${i+1}`;
+         // Add them with a special index marker so we know it's a custom col
+         headersMap.push({ index: headerRow.length + i, name });
+      }
+
+
       // Filter excluded cols
       const headers = config.excludedCols ? headersMap.filter(h => !config.excludedCols.includes(h.name)) : headersMap;
 
@@ -137,12 +145,41 @@ export async function POST(req: Request) {
         if (!row || row.length === 0) continue;
         const record: any = {};
         let hasData = false;
+        
+        // Calculate the relative row index used in the UI for editKeys
+        const relativeRowIdx = i - (config.rowOffset || 0);
+        
         headers.forEach((h) => {
-            const val = row[h.index];
+            const isAddedCol = h.index >= headerRow.length;
+            let val;
+            
+            if (isAddedCol) {
+                const addedColIdx = h.index - headerRow.length;
+                const editKey = `${relativeRowIdx}_added_${addedColIdx}`;
+                val = config.cellEdits && config.cellEdits[editKey] !== undefined ? config.cellEdits[editKey] : '';
+            } else {
+                const editKey = `${relativeRowIdx}_${h.index}`;
+                val = config.cellEdits && config.cellEdits[editKey] !== undefined ? config.cellEdits[editKey] : row[h.index];
+            }
+
             if (val !== undefined && val !== null && val !== '') hasData = true;
             record[h.name] = val;
         });
         if (hasData) records.push(record);
+      }
+      
+      // Append added rows
+      if (config.addedRows && config.addedRows.length > 0) {
+         config.addedRows.forEach((addedRow: any[]) => {
+            const record: any = {};
+            let hasData = false;
+            headers.forEach(h => {
+                const val = addedRow[h.index];
+                if (val !== undefined && val !== null && val !== '') hasData = true;
+                record[h.name] = val;
+            });
+            if (hasData) records.push(record);
+         });
       }
 
       if (records.length === 0) continue;

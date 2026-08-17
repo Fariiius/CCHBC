@@ -25,6 +25,9 @@ export interface SheetPrepConfig {
   originalSheetName: string;
   tableNameOverride?: string;
   rowOffset?: number;
+  cellEdits?: Record<string, string>;
+  addedCols?: number;
+  addedRows?: string[][];
   headerRowIdx: number;
   dataEndRow?: number;
   excludedRows: number[];
@@ -180,6 +183,9 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
          tableNameOverride: s.tableNameOverride,
          rowOffset: s.rowOffset,
          headerRowIdx: s.defaultHeaderRowIdx,
+         cellEdits: {},
+         addedCols: 0,
+         addedRows: [],
          excludedRows: [],
          excludedCols: [],
          columnTypes: {},
