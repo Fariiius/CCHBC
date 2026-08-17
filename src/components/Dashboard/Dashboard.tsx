@@ -145,7 +145,7 @@ export const Dashboard = () => {
           {/* Studio Main Area */}
           {activeConfig && (
             <div style={{ flex: 1, padding: '2rem', overflowY: 'auto' }}>
-              <div style={{ maxWidth: 1200, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+              <div style={{ width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
 
                 {/* Section 0: Table Name */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--surface)', padding: '1.25rem 1.5rem', borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: '1px solid var(--border)' }}>
@@ -168,7 +168,7 @@ export const Dashboard = () => {
                     Select the row that contains your column headers. You can also permanently delete any garbage rows (e.g. totals or empty space) by clicking the trash icon next to them.
                   </p>
 
-                  <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'auto', maxHeight: 400, background: '#f8f9fa' }}>
+                  <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'auto', maxHeight: '70vh', background: '#f8f9fa' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left', whiteSpace: 'nowrap' }}>
                       <thead style={{ position: 'sticky', top: 0, background: 'var(--surface)', zIndex: 10, boxShadow: '0 1px 0 var(--border)' }}>
                         <tr>

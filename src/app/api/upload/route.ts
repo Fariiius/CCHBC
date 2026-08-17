@@ -276,10 +276,10 @@ export async function POST(req: Request) {
             sheetName: config.tableNameOverride || config.id,
             tableName: dynamicTableName,
             columns,
-            records: records.slice(0, 100),
+            records: records.slice(0, 5000),
             totalRows: records.length,
             headerRowIdx,
-            rawPreview: rawArray.slice(0, 20)
+            rawPreview: rawArray.slice(0, 1000)
           });
 
       } catch (dbError) {
@@ -290,10 +290,10 @@ export async function POST(req: Request) {
             sheetName: config.tableNameOverride || config.id,
             tableName: dynamicTableName,
             columns,
-            records: records.slice(0, 100),
+            records: records.slice(0, 5000),
             totalRows: records.length,
             headerRowIdx,
-            rawPreview: rawArray.slice(0, 20)
+            rawPreview: rawArray.slice(0, 1000)
           });
       }
     }
