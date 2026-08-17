@@ -47,7 +47,7 @@ export async function POST(req: Request) {
       if (tables.length === 0) return;
 
       tables.forEach((t, idx) => {
-         const previewSlice = rawArray.slice(t.start, Math.min(t.end + 1, t.start + 100));
+         const previewSlice = rawArray.slice(t.start, Math.min(t.end + 1, t.start + 1000));
          
          let defaultHeaderRowIdx = 0;
          let maxStrings = 0;

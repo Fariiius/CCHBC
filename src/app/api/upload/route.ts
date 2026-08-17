@@ -270,7 +270,7 @@ export async function POST(req: Request) {
             sheetName: config.tableNameOverride || config.id,
             tableName: dynamicTableName,
             columns,
-            records: records.slice(0, 5000),
+            records: records,
             totalRows: records.length,
             headerRowIdx: headerVisIdx,
             rawPreview: rawArray.slice(0, 1000)
@@ -284,7 +284,7 @@ export async function POST(req: Request) {
             sheetName: config.tableNameOverride || config.id,
             tableName: dynamicTableName,
             columns,
-            records: records.slice(0, 5000),
+            records: records,
             totalRows: records.length,
             headerRowIdx: headerVisIdx,
             rawPreview: rawArray.slice(0, 1000)

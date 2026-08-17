@@ -258,12 +258,21 @@ export const Dashboard = () => {
                             Row Actions
                             <button onClick={handleAddRow} style={{ padding: '0.2rem 0.4rem', background: 'var(--primary-light)', color: 'var(--primary)', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600, fontSize: '0.7rem' }}>+ Row</button>
                           </th>
-                          {activeConfig.rawPreview[0]?.map((_, i) => (
-                            <th key={i} style={{ padding: '0.75rem', color: '#5f6368', fontWeight: 600, borderLeft: '1px solid var(--border)' }}>Col {i + 1}</th>
-                          ))}
-                          {Array.from({ length: activeConfig.addedCols || 0 }).map((_, i) => (
-                            <th key={`added_${i}`} style={{ padding: '0.75rem', color: 'var(--primary)', fontWeight: 600, borderLeft: '1px solid var(--border)' }}>Custom Col {i + 1}</th>
-                          ))}
+                          {activeConfig.rawPreview[0]?.map((_, i) => {
+                            const col = headers.find(h => h.index === i);
+                            const isHidden = col && activeConfig.excludedCols?.includes(col.name);
+                            return (
+                              <th key={i} style={{ padding: '0.75rem', color: isHidden ? '#cbd5e1' : '#5f6368', fontWeight: 600, borderLeft: '1px solid var(--border)', background: isHidden ? '#f8f9fa' : 'transparent', opacity: isHidden ? 0.5 : 1 }}>Col {i + 1}</th>
+                            );
+                          })}
+                          {Array.from({ length: activeConfig.addedCols || 0 }).map((_, i) => {
+                            const cIdx = (activeConfig.rawPreview[0]?.length || 0) + i;
+                            const col = headers.find(h => h.index === cIdx);
+                            const isHidden = col && activeConfig.excludedCols?.includes(col.name);
+                            return (
+                              <th key={`added_${i}`} style={{ padding: '0.75rem', color: isHidden ? '#cbd5e1' : 'var(--primary)', fontWeight: 600, borderLeft: '1px solid var(--border)', background: isHidden ? '#f8f9fa' : 'transparent', opacity: isHidden ? 0.5 : 1 }}>Custom Col {i + 1}</th>
+                            );
+                          })}
                           <th style={{ padding: '0.75rem', textAlign: 'right' }}>
                             <button
                               onClick={() => updatePrepConfig(activeConfig.id, { addedCols: (activeConfig.addedCols || 0) + 1 })}
@@ -343,14 +352,18 @@ export const Dashboard = () => {
                                 const editKey = `${rowId}_${cIdx}`;
                                 const cellVal = row[cIdx];
                                 const displayVal = activeConfig.cellEdits && activeConfig.cellEdits[editKey] !== undefined ? activeConfig.cellEdits[editKey] : (cellVal !== undefined && cellVal !== null ? String(cellVal) : '');
+                                
+                                const col = headers.find(h => h.index === cIdx);
+                                const isColHidden = col && activeConfig.excludedCols?.includes(col.name);
+                                
                                 return (
-                                  <td key={cIdx} style={{ padding: 0, borderLeft: '1px solid var(--border)', maxWidth: 200 }}>
+                                  <td key={cIdx} style={{ padding: 0, borderLeft: '1px solid var(--border)', maxWidth: 200, background: isColHidden ? '#f8f9fa' : 'transparent', opacity: isColHidden ? 0.4 : 1, transition: 'all 0.2s' }}>
                                     <input
                                       type="text"
                                       value={displayVal}
                                       onChange={e => updatePrepConfig(activeConfig.id, { cellEdits: { ...(activeConfig.cellEdits || {}), [editKey]: e.target.value } })}
-                                      style={{ width: '100%', padding: '0.6rem', border: 'none', background: 'transparent', outline: 'none', color: isExcluded ? '#9aa0a6' : 'inherit', cursor: isExcluded ? 'not-allowed' : 'text' }}
-                                      disabled={isExcluded}
+                                      style={{ width: '100%', padding: '0.6rem', border: 'none', background: 'transparent', outline: 'none', color: (isExcluded || isColHidden) ? '#9aa0a6' : 'inherit', cursor: (isExcluded || isColHidden) ? 'not-allowed' : 'text' }}
+                                      disabled={isExcluded || isColHidden}
                                       placeholder={isOrig && cIdx < (activeConfig.rawPreview[0]?.length || 0) ? '' : 'Type...'}
                                     />
                                   </td>
