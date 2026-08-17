@@ -129,8 +129,13 @@ export async function POST(req: Request) {
           if (idx !== -1) endVisIdx = idx;
       }
       
+      const headerRowId = config.headerRowId || finalRowIds[headerVisIdx];
       const headerRow = finalRows[headerVisIdx] || [];
-      const rawHeaders = headerRow.map((h: any, i: number) => h !== undefined && h !== null && String(h).trim() !== '' ? String(h).trim() : `Column_${i+1}`);
+      const rawHeaders = headerRow.map((h: any, i: number) => {
+          const editKey = `${headerRowId}_${i}`;
+          let finalH = config.cellEdits && config.cellEdits[editKey] !== undefined ? config.cellEdits[editKey] : h;
+          return finalH !== undefined && finalH !== null && String(finalH).trim() !== '' ? String(finalH).trim() : `Column_${i+1}`;
+      });
       
       const headersMap: { index: number, name: string }[] = [];
       const headerCounts: Record<string, number> = {};
@@ -168,8 +173,10 @@ export async function POST(req: Request) {
           const record: any = {};
           let hasData = false;
           
+          const rowId = finalRowIds[i];
           headers.forEach((h) => {
-              const val = row[h.index];
+              const editKey = `${rowId}_${h.index}`;
+              const val = config.cellEdits && config.cellEdits[editKey] !== undefined ? config.cellEdits[editKey] : row[h.index];
               if (val !== undefined && val !== null && val !== '') hasData = true;
               record[h.name] = val;
           });
