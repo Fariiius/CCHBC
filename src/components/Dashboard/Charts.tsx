@@ -16,7 +16,7 @@ const COLORS = ['#F40009', '#111111', '#555555', '#999999', '#D90008'];
 const fmt = (val: number, isPerc?: boolean) => {
   if (isNaN(val) || val == null) return '-';
   if (isPerc) return (val * 100).toFixed(1) + '%';
-  return val >= 1000000 ? (val/1000000).toFixed(1) + 'M' : val >= 1000 ? (val/1000).toFixed(1) + 'k' : val.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  return val >= 1000000000 ? (val/1000000000).toFixed(1) + 'B' : val >= 1000000 ? (val/1000000).toFixed(1) + 'M' : val >= 1000 ? (val/1000).toFixed(1) + 'k' : val.toLocaleString(undefined, { maximumFractionDigits: 2 });
 };
 
 // --- Modals ---
@@ -185,8 +185,8 @@ export const DashboardView = () => {
   const [activeFilters, setActiveFilters] = useState<Record<string, string>>({}); // { "colName": "val" }
   const layoutRef = useRef<HTMLDivElement>(null);
 
-  const layoutKpis = kpiConfigs.map(k => ({ i: k.id, x: k.x ?? 0, y: k.y ?? 0, w: k.w ?? 3, h: k.h ?? 2 }));
-  const layoutCharts = chartConfigs.map(c => ({ i: c.id, x: c.x ?? 0, y: c.y ?? 2, w: c.w ?? 6, h: c.h ?? 6 }));
+  const layoutKpis = kpiConfigs.map(k => ({ i: k.id, x: k.x ?? 0, y: k.y ?? 0, w: k.w ?? 3, h: k.h ?? 2, minW: 2, minH: 2 }));
+  const layoutCharts = chartConfigs.map(c => ({ i: c.id, x: c.x ?? 0, y: c.y ?? 2, w: c.w ?? 6, h: c.h ?? 5, minW: 3, minH: 4 }));
   const layouts = { lg: [...layoutKpis, ...layoutCharts] };
 
   const filterCols = columns.filter(c => c.isFilter);
@@ -335,9 +335,15 @@ const ChartCard = ({ config, activeFilters, onEdit }: any) => {
   
   if (config.type === 'pie' || config.type === 'doughnut') {
     option = {
-      tooltip: { trigger: 'item', formatter: (p: any) => `<b>${p.name}</b><br/>${p.marker} ${fmt(p.value, config.isPercentage)} (${p.percent}%)` },
+      tooltip: { trigger: 'item', formatter: (p: any) => `<b>${p.name}</b><br/>${p.marker} ${fmt(p.value, config.isPercentage)}${config.isPercentage ? '' : ` (${p.percent}%)`}` },
       legend: { bottom: 0, textStyle: { fontSize: 10 } },
-      series: [{ type: 'pie', radius: config.type === 'doughnut' ? ['40%', '70%'] : '70%', center: ['50%', '45%'], data: data.map(d => ({ name: d.name, value: d.value_0 })) }]
+      series: [{ 
+        type: 'pie', 
+        radius: config.type === 'doughnut' ? ['40%', '70%'] : '70%', 
+        center: ['50%', '45%'], 
+        data: data.map(d => ({ name: d.name, value: d.value_0 })),
+        label: { formatter: (p: any) => `${p.name}: ${fmt(p.value, config.isPercentage)}` }
+      }]
     };
   } else {
     option = {
