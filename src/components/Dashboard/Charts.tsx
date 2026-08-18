@@ -185,8 +185,9 @@ export const DashboardView = () => {
   const [activeFilters, setActiveFilters] = useState<Record<string, string>>({}); // { "colName": "val" }
   const layoutRef = useRef<HTMLDivElement>(null);
 
-  const layoutKpis = kpiConfigs.map(k => ({ i: k.id, x: k.x ?? 0, y: k.y ?? 0, w: k.w ?? 6, h: k.h ?? 2, minW: 3, minH: 2 }));
-  const layoutCharts = chartConfigs.map(c => ({ i: c.id, x: c.x ?? 0, y: c.y ?? 2, w: c.w ?? 12, h: c.h ?? 5, minW: 4, minH: 4 }));
+  // 12 columns everywhere ensures predictable horizontal resizing and no breakpoint coordinate mismatch
+  const layoutKpis = kpiConfigs.map(k => ({ i: k.id, x: k.x ?? 0, y: k.y ?? 0, w: k.w ?? 3, h: k.h ?? 2, minW: 2, minH: 2 }));
+  const layoutCharts = chartConfigs.map(c => ({ i: c.id, x: c.x ?? 0, y: c.y ?? 2, w: c.w ?? 6, h: c.h ?? 5, minW: 3, minH: 4 }));
   const layouts = { lg: [...layoutKpis, ...layoutCharts] };
 
   const filterCols = columns.filter(c => c.isFilter);
@@ -252,7 +253,7 @@ export const DashboardView = () => {
       {/* Grid */}
       <div ref={layoutRef} style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', position: 'relative', zIndex: 1 }}>
         {/* @ts-ignore */}
-        <ResponsiveGridLayout className="layout" layouts={layouts} breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }} cols={{ lg: 24, md: 20, sm: 12, xs: 8, xxs: 4 }} rowHeight={60} onLayoutChange={(l) => updateLayouts(l.map(x=>({i:x.i, x:x.x, y:x.y, w:x.w, h:x.h})))} draggableHandle=".drag-handle" margin={[24, 24]} compactType={null} preventCollision={false}>
+        <ResponsiveGridLayout className="layout" layouts={layouts} breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }} cols={{ lg: 12, md: 12, sm: 12, xs: 12, xxs: 12 }} rowHeight={60} onLayoutChange={(l) => updateLayouts(l.map(x=>({i:x.i, x:x.x, y:x.y, w:x.w, h:x.h})))} draggableHandle=".drag-handle" margin={[24, 24]} compactType="vertical" preventCollision={false}>
           {kpiConfigs.map(k => (
             <div key={k.id}><KPICard config={k} activeFilters={activeFilters} onEdit={() => setShowKpiModal(k)} /></div>
           ))}
@@ -302,6 +303,9 @@ const KPICard = ({ config, activeFilters, onEdit }: any) => {
   }
 
   const isPinned = !!config.pinnedCellId;
+  const parsedVal = typeof val === 'string' ? Number(val.replace(/,/g, '')) : val;
+  const finalVal = !isNaN(parsedVal as any) && parsedVal !== null ? Number(parsedVal) : val;
+
   return (
     <div style={{ background: '#222222', border: isPinned ? '1px solid #E3001B' : '1px solid #333', borderRadius: 16, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '1.25rem', height: '100%', position: 'relative', animation: 'fadeIn 0.6s ease-out' }}>
       <div className="drag-handle" style={{ position: 'absolute', inset: 0, cursor: 'grab', zIndex: 1 }}></div>
@@ -312,7 +316,7 @@ const KPICard = ({ config, activeFilters, onEdit }: any) => {
         {config.title || config.col || 'KPI'}
       </div>
       <div style={{ fontSize: '2.5rem', fontWeight: 500, color: isPinned ? '#E3001B' : '#FFFFFF', lineHeight: 1, zIndex: 2, letterSpacing: '-1px' }}>
-        {typeof val === 'number' ? fmt(val, config.isPercentage) : (val || '-')}
+        {typeof finalVal === 'number' ? fmt(finalVal, config.isPercentage) : (finalVal || '-')}
       </div>
     </div>
   );
