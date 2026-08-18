@@ -11,6 +11,8 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.109.0",
     "@types/pg": "^8.21.0",
+    "dexie": "^4.4.5",
+    "dexie-react-hooks": "^4.4.0",
     "echarts": "^6.1.0",
     "echarts-for-react": "^3.0.6",
     "html2canvas": "^1.4.1",

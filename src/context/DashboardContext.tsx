@@ -1,83 +1,62 @@
 "use client";
 import React, { createContext, useContext, useState, ReactNode } from 'react';
+import { db, ExtractedTable, TableColumn, TableRecord, PinnedCell, ChartConfigDB, KpiConfigDB } from '@/lib/db';
+import { useLiveQuery } from 'dexie-react-hooks';
 
-export interface SheetAnalysis {
+export interface StagingSheet {
   name: string;
-  headers: string[];
-  records: any[];
-  numericCols: string[];
-  categoricalCols: string[];
-  dateCols: string[];
-  totalRows: number;
-}
-
-export interface ChartSeries {
-  id: string;
-  sheetName: string;
-  valueCol: string;
-  calcOp?: '+'|'-'|'*'|'/';
-  calcCol?: string;
-  color?: string;
-}
-
-export interface ChartConfig {
-  id: string;
-  categoryCol: string;
-  title: string;
-  type: 'pie'|'bar'|'line'|'doughnut';
-  isPercentage?: boolean;
-  series: ChartSeries[];
-  x?: number; y?: number; w?: number; h?: number;
-}
-
-export interface KpiConfig {
-  id: string;
-  sheetName: string;
-  col: string;
-  calcCol?: string;
-  calcOp?: '+'|'-'|'*'|'/';
-  isPercentage?: boolean;
-  x?: number; y?: number; w?: number; h?: number;
-  title?: string;
-}
-
-export interface Workspace {
-  id: string;
-  fileName: string;
-  sheets: SheetAnalysis[];
-  chartConfigs: ChartConfig[];
-  kpiConfigs: KpiConfig[];
+  data: any[][];
 }
 
 interface DashboardContextType {
-  workspaces: Workspace[];
-  activeWorkspaceId: string | null;
+  stagingFile: File | null;
+  stagingSheets: StagingSheet[];
   loading: boolean;
   error: string | null;
   
+  // Staging Actions
   handleFileUpload: (file: File) => Promise<void>;
-  resetDashboard: () => void;
-  switchWorkspace: (id: string) => void;
-  closeWorkspace: (id: string) => void;
+  clearStaging: () => void;
+
+  // DB State (Live from Dexie)
+  tables: ExtractedTable[];
+  columns: TableColumn[];
+  records: TableRecord[];
+  pinnedCells: PinnedCell[];
+  chartConfigs: ChartConfigDB[];
+  kpiConfigs: KpiConfigDB[];
+
+  // DB Actions
+  saveExtractedTable: (name: string, sheetName: string, headers: { name: string, isFilter: boolean }[], rows: any[][]) => Promise<void>;
+  savePinnedCell: (name: string, sheetName: string, cellRef: string, value: any) => Promise<void>;
   
-  addChart: (chart: Omit<ChartConfig, 'id'>) => void;
-  updateChart: (id: string, updates: Partial<ChartConfig>) => void;
-  removeChart: (id: string) => void;
+  addChart: (chart: Omit<ChartConfigDB, 'id'>) => Promise<void>;
+  updateChart: (id: string, updates: Partial<ChartConfigDB>) => Promise<void>;
+  removeChart: (id: string) => Promise<void>;
   
-  addKpi: (kpi: Omit<KpiConfig, 'id'>) => void;
-  updateKpi: (id: string, updates: Partial<KpiConfig>) => void;
-  removeKpi: (id: string) => void;
+  addKpi: (kpi: Omit<KpiConfigDB, 'id'>) => Promise<void>;
+  updateKpi: (id: string, updates: Partial<KpiConfigDB>) => Promise<void>;
+  removeKpi: (id: string) => Promise<void>;
   
-  updateLayouts: (layouts: any[]) => void;
+  updateLayouts: (layouts: any[]) => Promise<void>;
+  clearAllData: () => Promise<void>;
 }
 
 const DashboardContext = createContext<DashboardContextType | undefined>(undefined);
 
 export const DashboardProvider = ({ children }: { children: ReactNode }) => {
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
+  const [stagingFile, setStagingFile] = useState<File | null>(null);
+  const [stagingSheets, setStagingSheets] = useState<StagingSheet[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Use Live Query to subscribe to Dexie updates
+  const tables = useLiveQuery(() => db.extractedTables.toArray()) || [];
+  const columns = useLiveQuery(() => db.columns.toArray()) || [];
+  const records = useLiveQuery(() => db.records.toArray()) || [];
+  const pinnedCells = useLiveQuery(() => db.pinnedCells.toArray()) || [];
+  const chartConfigs = useLiveQuery(() => db.chartConfigs.toArray()) || [];
+  const kpiConfigs = useLiveQuery(() => db.kpiConfigs.toArray()) || [];
 
   const handleFileUpload = async (file: File) => {
     setLoading(true);
@@ -85,22 +64,12 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      // We rely entirely on the preview route which perfectly parses sheets
       const res = await fetch('/api/preview', { method: 'POST', body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to upload');
       
-      const newId = `ws-${Date.now()}`;
-      const newWs: Workspace = {
-        id: newId,
-        fileName: file.name,
-        sheets: data.sheets,
-        chartConfigs: [],
-        kpiConfigs: []
-      };
-      
-      setWorkspaces(prev => [...prev, newWs]);
-      setActiveWorkspaceId(newId);
+      setStagingFile(file);
+      setStagingSheets(data.sheets);
     } catch (err: any) {
       setError(err.message || 'Error parsing file.');
     } finally {
@@ -108,40 +77,106 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const resetDashboard = () => {
+  const clearStaging = () => {
+    setStagingFile(null);
+    setStagingSheets([]);
     setError(null);
   };
 
-  const updateActiveWorkspace = (updater: (ws: Workspace) => Workspace) => {
-    setWorkspaces(prev => prev.map(w => w.id === activeWorkspaceId ? updater(w) : w));
+  const saveExtractedTable = async (name: string, sheetName: string, headers: { name: string, isFilter: boolean }[], rows: any[][]) => {
+    try {
+      // 1. Record the Upload
+      const uploadId = await db.uploads.add({ filename: stagingFile?.name || 'Unknown', uploadedAt: new Date().toISOString() });
+      
+      // 2. Save Table
+      const tableId = `tbl-${Date.now()}`;
+      await db.extractedTables.add({ id: tableId, uploadId, name, originalSheet: sheetName });
+
+      // 3. Save Columns
+      const colsToInsert = headers.map((h, i) => ({
+        id: `col-${Date.now()}-${i}`,
+        tableId,
+        name: h.name,
+        isFilter: h.isFilter
+      }));
+      await db.columns.bulkAdd(colsToInsert);
+
+      // 4. Save Records (JSON objects)
+      const recordsToInsert = rows.map(row => {
+        const dataObj: Record<string, any> = {};
+        headers.forEach((h, i) => {
+          dataObj[h.name] = row[i];
+        });
+        return { tableId, data: dataObj };
+      });
+      
+      await db.records.bulkAdd(recordsToInsert);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to save table to database.");
+    }
   };
 
-  const addChart = (c: Omit<ChartConfig, 'id'>) => updateActiveWorkspace(w => ({ ...w, chartConfigs: [...w.chartConfigs, { ...c, id: 'c-'+Date.now() }] }));
-  const updateChart = (id: string, updates: Partial<ChartConfig>) => updateActiveWorkspace(w => ({ ...w, chartConfigs: w.chartConfigs.map(c => c.id === id ? { ...c, ...updates } : c) }));
-  const removeChart = (id: string) => updateActiveWorkspace(w => ({ ...w, chartConfigs: w.chartConfigs.filter(c => c.id !== id) }));
+  const savePinnedCell = async (name: string, sheetName: string, cellRef: string, value: any) => {
+    try {
+      const uploadId = await db.uploads.add({ filename: stagingFile?.name || 'Unknown', uploadedAt: new Date().toISOString() });
+      const cellId = `cell-${Date.now()}`;
+      await db.pinnedCells.add({ id: cellId, uploadId, name, value, sheetName, cellRef });
+      
+      // Auto-create a KPI config for it
+      await addKpi({ pinnedCellId: cellId, title: name, w: 3, h: 2 });
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
-  const addKpi = (k: Omit<KpiConfig, 'id'>) => updateActiveWorkspace(w => ({ ...w, kpiConfigs: [...w.kpiConfigs, { ...k, id: 'k-'+Date.now() }] }));
-  const updateKpi = (id: string, updates: Partial<KpiConfig>) => updateActiveWorkspace(w => ({ ...w, kpiConfigs: w.kpiConfigs.map(c => c.id === id ? { ...c, ...updates } : c) }));
-  const removeKpi = (id: string) => updateActiveWorkspace(w => ({ ...w, kpiConfigs: w.kpiConfigs.filter(c => c.id !== id) }));
+  const addChart = async (c: Omit<ChartConfigDB, 'id'>) => { await db.chartConfigs.add({ ...c, id: `c-${Date.now()}` }); };
+  const updateChart = async (id: string, updates: Partial<ChartConfigDB>) => { await db.chartConfigs.update(id, updates); };
+  const removeChart = async (id: string) => { await db.chartConfigs.delete(id); };
 
-  const updateLayouts = (layouts: any[]) => {
-    updateActiveWorkspace(w => {
-      const nc = w.chartConfigs.map(c => { const l = layouts.find(x => x.i === c.id); return l ? { ...c, x: l.x, y: l.y, w: l.w, h: l.h } : c; });
-      const nk = w.kpiConfigs.map(k => { const l = layouts.find(x => x.i === k.id); return l ? { ...k, x: l.x, y: l.y, w: l.w, h: l.h } : k; });
-      return { ...w, chartConfigs: nc, kpiConfigs: nk };
-    });
+  const addKpi = async (k: Omit<KpiConfigDB, 'id'>) => { await db.kpiConfigs.add({ ...k, id: `k-${Date.now()}` }); };
+  const updateKpi = async (id: string, updates: Partial<KpiConfigDB>) => { await db.kpiConfigs.update(id, updates); };
+  const removeKpi = async (id: string) => { await db.kpiConfigs.delete(id); };
+
+  const updateLayouts = async (layouts: any[]) => {
+    // Update all charts
+    const charts = await db.chartConfigs.toArray();
+    for (const c of charts) {
+      const l = layouts.find(x => x.i === c.id);
+      if (l && (c.x !== l.x || c.y !== l.y || c.w !== l.w || c.h !== l.h)) {
+        await db.chartConfigs.update(c.id, { x: l.x, y: l.y, w: l.w, h: l.h });
+      }
+    }
+    // Update all KPIs
+    const kpis = await db.kpiConfigs.toArray();
+    for (const k of kpis) {
+      const l = layouts.find(x => x.i === k.id);
+      if (l && (k.x !== l.x || k.y !== l.y || k.w !== l.w || k.h !== l.h)) {
+        await db.kpiConfigs.update(k.id, { x: l.x, y: l.y, w: l.w, h: l.h });
+      }
+    }
+  };
+
+  const clearAllData = async () => {
+    await db.extractedTables.clear();
+    await db.columns.clear();
+    await db.records.clear();
+    await db.pinnedCells.clear();
+    await db.chartConfigs.clear();
+    await db.kpiConfigs.clear();
+    await db.uploads.clear();
+    clearStaging();
   };
 
   return (
     <DashboardContext.Provider value={{
-      workspaces, activeWorkspaceId, loading, error,
-      handleFileUpload, resetDashboard, switchWorkspace: setActiveWorkspaceId,
-      closeWorkspace: (id) => {
-        setWorkspaces(p => p.filter(w => w.id !== id));
-        if (activeWorkspaceId === id) setActiveWorkspaceId(null);
-      },
+      stagingFile, stagingSheets, loading, error,
+      handleFileUpload, clearStaging,
+      tables, columns, records, pinnedCells, chartConfigs, kpiConfigs,
+      saveExtractedTable, savePinnedCell,
       addChart, updateChart, removeChart,
-      addKpi, updateKpi, removeKpi, updateLayouts
+      addKpi, updateKpi, removeKpi, updateLayouts,
+      clearAllData
     }}>
       {children}
     </DashboardContext.Provider>

@@ -1,12 +1,14 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useDashboard, ChartConfig, KpiConfig, ChartSeries } from '@/context/DashboardContext';
+import { useDashboard } from '@/context/DashboardContext';
+import { ChartConfigDB, KpiConfigDB, ChartSeriesDB } from '@/lib/db';
 import { ResponsiveGridLayout } from 'react-grid-layout';
 import ReactECharts from 'echarts-for-react';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
-import { Edit2, X, Plus, GripHorizontal, Download } from 'lucide-react';
+import { Edit2, X, Plus, GripHorizontal, Download, Filter } from 'lucide-react';
+import _ from 'lodash';
 
 const COLORS = ['#F40009', '#111111', '#555555', '#999999', '#D90008'];
 
@@ -19,110 +21,136 @@ const fmt = (val: number, isPerc?: boolean) => {
 
 // --- Modals ---
 const Overlay = ({ children, onClose, width=400 }: any) => (
-  <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }} onClick={onClose}>
-    <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 10, padding: '1.5rem', width, maxWidth: '95vw', maxHeight: '95vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 16px 48px rgba(0,0,0,0.12)' }}>{children}</div>
+  <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={onClose}>
+    <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 12, padding: '1.5rem', width, maxWidth: '95vw', maxHeight: '95vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 48px rgba(0,0,0,0.2)' }}>{children}</div>
   </div>
 );
 
-const selStyle = { width: '100%', padding: '0.5rem', background: '#f8f9fa', border: '1px solid #e8eaed', borderRadius: 6, fontSize: '0.8rem', outline: 'none', color: '#202124' };
+const selStyle = { width: '100%', padding: '0.6rem', background: '#f8f9fa', border: '1px solid #dadce0', borderRadius: 6, fontSize: '0.85rem', outline: 'none', color: '#202124' };
 
-const KpiModal = ({ onClose, initial }: { onClose: () => void, initial?: KpiConfig }) => {
-  const { workspaces, activeWorkspaceId, addKpi, updateKpi } = useDashboard();
-  const ws = workspaces.find(w => w.id === activeWorkspaceId);
-  const sheets = ws?.sheets || [];
+const KpiModal = ({ onClose, initial }: { onClose: () => void, initial?: KpiConfigDB }) => {
+  const { tables, columns, addKpi, updateKpi, pinnedCells } = useDashboard();
   
-  const [sn, setSn] = useState(initial?.sheetName || sheets[0]?.name || '');
+  const [mode, setMode] = useState<'pinned'|'aggregate'>(initial?.pinnedCellId ? 'pinned' : 'aggregate');
+  const [pinnedId, setPinnedId] = useState(initial?.pinnedCellId || '');
+  
+  const [tid, setTid] = useState(initial?.tableId || tables[0]?.id || '');
   const [col, setCol] = useState(initial?.col || '');
   const [calc, setCalc] = useState(initial?.calcCol || '');
   const [op, setOp] = useState<'+'|'-'|'*'|'/'>(initial?.calcOp || '/');
   const [isPerc, setIsPerc] = useState(initial?.isPercentage || false);
-  const s = sheets.find(x => x.name === sn) || sheets[0];
+  const [title, setTitle] = useState(initial?.title || '');
   
+  const tableCols = columns.filter(c => c.tableId === tid);
+
   return (
     <Overlay onClose={onClose}>
-      <div style={{ fontWeight: 700, marginBottom: '1rem' }}>{initial ? 'Edit KPI' : 'Add KPI'}</div>
-      {sheets.length > 1 && <div style={{ marginBottom: 8 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Table</label><select value={sn} onChange={e => { setSn(e.target.value); setCol(''); setCalc(''); }} style={selStyle}>{sheets.map(x => <option key={x.name} value={x.name}>{x.name}</option>)}</select></div>}
-      <div style={{ marginBottom: 8 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Metric</label><select value={col} onChange={e => setCol(e.target.value)} style={selStyle}><option value="">Select metric...</option><option value="COUNT(Rows)">COUNT(Rows)</option>{(s?.numericCols || []).map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <div style={{ width: 60 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Op</label><select value={op} onChange={e => setOp(e.target.value as any)} style={selStyle}><option value="+">+</option><option value="-">-</option><option value="*">*</option><option value="/">/</option></select></div>
-        <div style={{ flex: 1 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Second Metric (Optional)</label><select value={calc} onChange={e => setCalc(e.target.value)} style={selStyle}><option value="">None</option><option value="COUNT(Rows)">COUNT(Rows)</option>{(s?.numericCols || []).map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-      </div>
-      <div style={{ marginBottom: 16 }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', color: '#3c4043', cursor: 'pointer' }}>
-          <input type="checkbox" checked={isPerc} onChange={e => setIsPerc(e.target.checked)} /> Format as Percentage
+      <div style={{ fontWeight: 800, marginBottom: '1.5rem', fontSize: '1.25rem' }}>{initial ? 'Edit KPI' : 'Add KPI'}</div>
+      
+      {!initial && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16, background: '#f1f3f4', padding: 4, borderRadius: 8 }}>
+          <button onClick={() => setMode('pinned')} style={{ flex: 1, padding: '0.5rem', borderRadius: 6, border: 'none', background: mode === 'pinned' ? 'white' : 'transparent', fontWeight: 600, cursor: 'pointer', boxShadow: mode === 'pinned' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none' }}>Pinned Cell</button>
+          <button onClick={() => setMode('aggregate')} style={{ flex: 1, padding: '0.5rem', borderRadius: 6, border: 'none', background: mode === 'aggregate' ? 'white' : 'transparent', fontWeight: 600, cursor: 'pointer', boxShadow: mode === 'aggregate' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none' }}>Table Aggregate</button>
+        </div>
+      )}
+
+      {mode === 'pinned' ? (
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 6 }}>Select Pinned Cell</label>
+          <select value={pinnedId} onChange={e => setPinnedId(e.target.value)} style={selStyle}>
+            <option value="">Select...</option>
+            {pinnedCells.map(p => <option key={p.id} value={p.id}>{p.name} ({p.sheetName})</option>)}
+          </select>
+        </div>
+      ) : (
+        <>
+          <div style={{ marginBottom: 12 }}><label style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 6 }}>Table</label><select value={tid} onChange={e => { setTid(e.target.value); setCol(''); setCalc(''); }} style={selStyle}>{tables.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></div>
+          <div style={{ marginBottom: 12 }}><label style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 6 }}>Metric</label><select value={col} onChange={e => setCol(e.target.value)} style={selStyle}><option value="">Select metric...</option><option value="COUNT(Rows)">COUNT(Rows)</option>{tableCols.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}</select></div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            <div style={{ width: 70 }}><label style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 6 }}>Op</label><select value={op} onChange={e => setOp(e.target.value as any)} style={selStyle}><option value="+">+</option><option value="-">-</option><option value="*">*</option><option value="/">/</option></select></div>
+            <div style={{ flex: 1 }}><label style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 6 }}>Second Metric (Optional)</label><select value={calc} onChange={e => setCalc(e.target.value)} style={selStyle}><option value="">None</option><option value="COUNT(Rows)">COUNT(Rows)</option>{tableCols.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}</select></div>
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 6 }}>Custom Title (Optional)</label>
+            <input value={title} onChange={e => setTitle(e.target.value)} style={selStyle} placeholder={col || "KPI Title"} />
+          </div>
+        </>
+      )}
+
+      <div style={{ marginBottom: 24 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', color: '#3c4043', cursor: 'pointer', fontWeight: 500 }}>
+          <input type="checkbox" checked={isPerc} onChange={e => setIsPerc(e.target.checked)} style={{ width: 16, height: 16 }} /> Format as Percentage
         </label>
       </div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={onClose} style={{ flex: 1, padding: '0.5rem', borderRadius: 6, background: '#f1f3f4', fontWeight: 600, border: 'none', cursor: 'pointer' }}>Cancel</button>
-        <button disabled={!col} onClick={() => {
-          if (initial) updateKpi(initial.id, { sheetName: sn, col, calcCol: calc || undefined, calcOp: calc ? op : undefined, isPercentage: isPerc });
-          else addKpi({ sheetName: sn, col, calcCol: calc || undefined, calcOp: calc ? op : undefined, isPercentage: isPerc, w: 3, h: 2, title: col });
+
+      <div style={{ display: 'flex', gap: 12 }}>
+        <button onClick={onClose} style={{ flex: 1, padding: '0.75rem', borderRadius: 8, background: '#f1f3f4', fontWeight: 700, border: 'none', cursor: 'pointer', color: '#5f6368' }}>Cancel</button>
+        <button disabled={mode === 'pinned' ? !pinnedId : !col} onClick={() => {
+          if (initial) updateKpi(initial.id, { pinnedCellId: pinnedId || undefined, tableId: tid || undefined, col, calcCol: calc || undefined, calcOp: calc ? op : undefined, isPercentage: isPerc, title });
+          else addKpi({ pinnedCellId: pinnedId || undefined, tableId: tid || undefined, col, calcCol: calc || undefined, calcOp: calc ? op : undefined, isPercentage: isPerc, w: 3, h: 2, title });
           onClose();
-        }} style={{ flex: 1, padding: '0.5rem', borderRadius: 6, background: col ? 'var(--primary)' : '#e8eaed', color: col ? 'white' : '#80868b', fontWeight: 600, border: 'none', cursor: 'pointer' }}>Save</button>
+        }} style={{ flex: 1, padding: '0.75rem', borderRadius: 8, background: '#F40009', color: 'white', fontWeight: 700, border: 'none', cursor: 'pointer', opacity: (mode === 'pinned' ? !pinnedId : !col) ? 0.5 : 1 }}>Save KPI</button>
       </div>
     </Overlay>
   );
 };
 
-const ChartModal = ({ onClose, initial }: { onClose: () => void, initial?: ChartConfig }) => {
-  const { workspaces, activeWorkspaceId, addChart, updateChart } = useDashboard();
-  const ws = workspaces.find(w => w.id === activeWorkspaceId);
-  const sheets = ws?.sheets || [];
+const ChartModal = ({ onClose, initial }: { onClose: () => void, initial?: ChartConfigDB }) => {
+  const { tables, columns, addChart, updateChart } = useDashboard();
 
   const [cat, setCat] = useState(initial?.categoryCol || '');
   const [type, setType] = useState(initial?.type || 'bar');
   const [isPerc, setIsPerc] = useState(initial?.isPercentage || false);
-  const [seriesList, setSeriesList] = useState<ChartSeries[]>(initial?.series || [{ id: 's1', sheetName: sheets[0]?.name || '', valueCol: '' }]);
+  const [seriesList, setSeriesList] = useState<ChartSeriesDB[]>(initial?.series || [{ id: 's1', tableId: tables[0]?.id || '', valueCol: '' }]);
 
-  const updateSeries = (idx: number, updates: Partial<ChartSeries>) => {
+  const updateSeries = (idx: number, updates: Partial<ChartSeriesDB>) => {
     const next = [...seriesList];
     next[idx] = { ...next[idx], ...updates };
     setSeriesList(next);
   };
 
   const getAvailableCats = () => {
-    const mainSheet = sheets.find(s => s.name === seriesList[0]?.sheetName);
-    if (!mainSheet) return [];
-    return [...(mainSheet.categoricalCols||[]), ...(mainSheet.dateCols||[])];
+    const mainTable = seriesList[0]?.tableId;
+    if (!mainTable) return [];
+    return columns.filter(c => c.tableId === mainTable).map(c => c.name);
   };
 
   return (
-    <Overlay onClose={onClose} width={500}>
-      <div style={{ fontWeight: 700, marginBottom: '1rem', fontSize: '1.1rem' }}>{initial ? 'Edit Chart' : 'Add Chart'}</div>
+    <Overlay onClose={onClose} width={550}>
+      <div style={{ fontWeight: 800, marginBottom: '1.5rem', fontSize: '1.25rem' }}>{initial ? 'Edit Chart' : 'Add Chart'}</div>
       
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-        <div style={{ flex: 1 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Shared X-Axis (Category)</label><select value={cat} onChange={e => setCat(e.target.value)} style={selStyle}><option value="">Select...</option>{getAvailableCats().map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-        <div style={{ flex: 1 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 3 }}>Chart Type</label><select value={type} onChange={e => setType(e.target.value as any)} style={selStyle}><option value="pie">Pie Chart</option><option value="doughnut">Doughnut Chart</option><option value="bar">Bar Chart</option><option value="line">Line Chart</option></select></div>
+      <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
+        <div style={{ flex: 1 }}><label style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 6 }}>Shared X-Axis (Category)</label><select value={cat} onChange={e => setCat(e.target.value)} style={selStyle}><option value="">Select...</option>{getAvailableCats().map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+        <div style={{ flex: 1 }}><label style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368', display: 'block', marginBottom: 6 }}>Chart Type</label><select value={type} onChange={e => setType(e.target.value as any)} style={selStyle}><option value="pie">Pie Chart</option><option value="doughnut">Doughnut Chart</option><option value="bar">Bar Chart</option><option value="line">Line Chart</option></select></div>
       </div>
       
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-          <label style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368' }}>Data Series (Y-Axis)</label>
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+          <label style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: '#5f6368' }}>Data Series (Y-Axis)</label>
           {(type === 'bar' || type === 'line') && (
-            <button onClick={() => setSeriesList([...seriesList, { id: 's'+Date.now(), sheetName: sheets[0]?.name || '', valueCol: '' }])} style={{ background: 'transparent', border: 'none', color: 'var(--primary)', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 2 }}><Plus size={12}/> Add Series</button>
+            <button onClick={() => setSeriesList([...seriesList, { id: 's'+Date.now(), tableId: tables[0]?.id || '', valueCol: '' }])} style={{ background: '#fce8e6', border: 'none', color: '#F40009', fontSize: '0.75rem', padding: '4px 8px', borderRadius: 6, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}><Plus size={14}/> Add Series</button>
           )}
         </div>
         
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '40vh', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '40vh', overflowY: 'auto' }}>
           {seriesList.map((s, idx) => {
-            const currentSheet = sheets.find(sh => sh.name === s.sheetName);
-            const numCols = currentSheet?.numericCols || [];
+            const tableCols = columns.filter(c => c.tableId === s.tableId).map(c => c.name);
             return (
-              <div key={s.id} style={{ background: '#f8f9fa', padding: '0.75rem', borderRadius: 8, border: '1px solid #e8eaed', position: 'relative' }}>
-                {seriesList.length > 1 && <button onClick={() => setSeriesList(seriesList.filter((_, i) => i !== idx))} style={{ position: 'absolute', top: 8, right: 8, background: 'white', border: '1px solid #e8eaed', borderRadius: 4, cursor: 'pointer', color: '#d93025', padding: 2 }}><X size={12}/></button>}
-                <div style={{ display: 'flex', gap: 8, marginBottom: 8, paddingRight: seriesList.length > 1 ? 24 : 0 }}>
+              <div key={s.id} style={{ background: '#f8f9fa', padding: '1rem', borderRadius: 8, border: '1px solid #e8eaed', position: 'relative' }}>
+                {seriesList.length > 1 && <button onClick={() => setSeriesList(seriesList.filter((_, i) => i !== idx))} style={{ position: 'absolute', top: 12, right: 12, background: 'white', border: '1px solid #e8eaed', borderRadius: 4, cursor: 'pointer', color: '#d93025', padding: 4 }}><X size={14}/></button>}
+                <div style={{ display: 'flex', gap: 12, marginBottom: 12, paddingRight: seriesList.length > 1 ? 28 : 0 }}>
                   <div style={{ flex: 1 }}>
-                    <label style={{ fontSize: '0.6rem', color: '#5f6368', display: 'block', marginBottom: 2 }}>Table</label>
-                    <select value={s.sheetName} onChange={e => updateSeries(idx, { sheetName: e.target.value, valueCol: '', calcCol: '' })} style={{...selStyle, padding: '0.35rem'}}>{sheets.map(x => <option key={x.name} value={x.name}>{x.name}</option>)}</select>
+                    <label style={{ fontSize: '0.65rem', fontWeight: 700, color: '#5f6368', display: 'block', marginBottom: 4 }}>Table</label>
+                    <select value={s.tableId} onChange={e => updateSeries(idx, { tableId: e.target.value, valueCol: '', calcCol: '' })} style={{...selStyle, padding: '0.5rem'}}>{tables.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
                   </div>
                   <div style={{ flex: 1 }}>
-                    <label style={{ fontSize: '0.6rem', color: '#5f6368', display: 'block', marginBottom: 2 }}>Metric</label>
-                    <select value={s.valueCol} onChange={e => updateSeries(idx, { valueCol: e.target.value })} style={{...selStyle, padding: '0.35rem'}}><option value="">Select metric...</option><option value="COUNT(Rows)">COUNT(Rows)</option>{numCols.map(c => <option key={c} value={c}>{c}</option>)}</select>
+                    <label style={{ fontSize: '0.65rem', fontWeight: 700, color: '#5f6368', display: 'block', marginBottom: 4 }}>Metric</label>
+                    <select value={s.valueCol} onChange={e => updateSeries(idx, { valueCol: e.target.value })} style={{...selStyle, padding: '0.5rem'}}><option value="">Select metric...</option><option value="COUNT(Rows)">COUNT(Rows)</option>{tableCols.map(c => <option key={c} value={c}>{c}</option>)}</select>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <div style={{ width: 60 }}><label style={{ fontSize: '0.6rem', color: '#5f6368', display: 'block', marginBottom: 2 }}>Op</label><select value={s.calcOp || '/'} onChange={e => updateSeries(idx, { calcOp: e.target.value as any })} style={{...selStyle, padding: '0.35rem'}}><option value="+">+</option><option value="-">-</option><option value="*">*</option><option value="/">/</option></select></div>
-                  <div style={{ flex: 1 }}><label style={{ fontSize: '0.6rem', color: '#5f6368', display: 'block', marginBottom: 2 }}>Second Metric (Optional)</label><select value={s.calcCol || ''} onChange={e => updateSeries(idx, { calcCol: e.target.value })} style={{...selStyle, padding: '0.35rem'}}><option value="">None</option><option value="COUNT(Rows)">COUNT(Rows)</option>{numCols.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <div style={{ width: 60 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, color: '#5f6368', display: 'block', marginBottom: 4 }}>Op</label><select value={s.calcOp || '/'} onChange={e => updateSeries(idx, { calcOp: e.target.value as any })} style={{...selStyle, padding: '0.5rem'}}><option value="+">+</option><option value="-">-</option><option value="*">*</option><option value="/">/</option></select></div>
+                  <div style={{ flex: 1 }}><label style={{ fontSize: '0.65rem', fontWeight: 700, color: '#5f6368', display: 'block', marginBottom: 4 }}>Second Metric (Optional)</label><select value={s.calcCol || ''} onChange={e => updateSeries(idx, { calcCol: e.target.value })} style={{...selStyle, padding: '0.5rem'}}><option value="">None</option><option value="COUNT(Rows)">COUNT(Rows)</option>{tableCols.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
                 </div>
               </div>
             );
@@ -130,20 +158,20 @@ const ChartModal = ({ onClose, initial }: { onClose: () => void, initial?: Chart
         </div>
       </div>
 
-      <div style={{ marginBottom: 16 }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', color: '#3c4043', cursor: 'pointer' }}>
-          <input type="checkbox" checked={isPerc} onChange={e => setIsPerc(e.target.checked)} /> Format numbers as Percentage
+      <div style={{ marginBottom: 24 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', color: '#3c4043', cursor: 'pointer', fontWeight: 500 }}>
+          <input type="checkbox" checked={isPerc} onChange={e => setIsPerc(e.target.checked)} style={{ width: 16, height: 16 }} /> Format numbers as Percentage
         </label>
       </div>
       
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={onClose} style={{ flex: 1, padding: '0.5rem', borderRadius: 6, background: '#f1f3f4', fontWeight: 600, border: 'none', cursor: 'pointer' }}>Cancel</button>
+      <div style={{ display: 'flex', gap: 12 }}>
+        <button onClick={onClose} style={{ flex: 1, padding: '0.75rem', borderRadius: 8, background: '#f1f3f4', fontWeight: 700, border: 'none', cursor: 'pointer', color: '#5f6368' }}>Cancel</button>
         <button disabled={!cat || seriesList.some(s => !s.valueCol)} onClick={() => { 
           const title = `${seriesList[0].valueCol} by ${cat}`;
           if (initial) updateChart(initial.id, { categoryCol: cat, title, type, isPercentage: isPerc, series: seriesList });
           else addChart({ categoryCol: cat, title, type, isPercentage: isPerc, series: seriesList, w: 6, h: 6 });
           onClose(); 
-        }} style={{ flex: 1, padding: '0.5rem', borderRadius: 6, background: cat && !seriesList.some(s => !s.valueCol) ? 'var(--primary)' : '#e8eaed', color: cat && !seriesList.some(s => !s.valueCol) ? 'white' : '#80868b', fontWeight: 600, border: 'none', cursor: 'pointer' }}>Save</button>
+        }} style={{ flex: 1, padding: '0.75rem', borderRadius: 8, background: '#F40009', color: 'white', fontWeight: 700, border: 'none', cursor: 'pointer', opacity: (!cat || seriesList.some(s => !s.valueCol)) ? 0.5 : 1 }}>Save Chart</button>
       </div>
     </Overlay>
   );
@@ -151,17 +179,29 @@ const ChartModal = ({ onClose, initial }: { onClose: () => void, initial?: Chart
 
 // --- View ---
 export const DashboardView = () => {
-  const { workspaces, activeWorkspaceId, updateLayouts } = useDashboard();
-  const ws = workspaces.find(w => w.id === activeWorkspaceId);
-  const [showChartModal, setShowChartModal] = useState<boolean | ChartConfig>(false);
-  const [showKpiModal, setShowKpiModal] = useState<boolean | KpiConfig>(false);
+  const { chartConfigs, kpiConfigs, updateLayouts, columns, records } = useDashboard();
+  const [showChartModal, setShowChartModal] = useState<boolean | ChartConfigDB>(false);
+  const [showKpiModal, setShowKpiModal] = useState<boolean | KpiConfigDB>(false);
+  const [activeFilters, setActiveFilters] = useState<Record<string, string>>({}); // { "colName": "val" }
   const layoutRef = useRef<HTMLDivElement>(null);
 
-  if (!ws) return null;
-
-  const layoutKpis = ws.kpiConfigs.map(k => ({ i: k.id, x: k.x ?? 0, y: k.y ?? 0, w: k.w ?? 3, h: k.h ?? 2 }));
-  const layoutCharts = ws.chartConfigs.map(c => ({ i: c.id, x: c.x ?? 0, y: c.y ?? 2, w: c.w ?? 6, h: c.h ?? 6 }));
+  const layoutKpis = kpiConfigs.map(k => ({ i: k.id, x: k.x ?? 0, y: k.y ?? 0, w: k.w ?? 3, h: k.h ?? 2 }));
+  const layoutCharts = chartConfigs.map(c => ({ i: c.id, x: c.x ?? 0, y: c.y ?? 2, w: c.w ?? 6, h: c.h ?? 6 }));
   const layouts = { lg: [...layoutKpis, ...layoutCharts] };
+
+  const filterCols = columns.filter(c => c.isFilter);
+  // Get unique values for each filter across all records matching that column
+  const filterOptions = _.memoize(() => {
+    const opts: Record<string, string[]> = {};
+    filterCols.forEach(fc => {
+      const vals = new Set<string>();
+      records.forEach(r => {
+        if (r.data[fc.name] !== undefined) vals.add(String(r.data[fc.name]));
+      });
+      opts[fc.name] = Array.from(vals).sort();
+    });
+    return opts;
+  })();
 
   const exportToPDF = async () => {
     if (!layoutRef.current) return;
@@ -176,39 +216,37 @@ export const DashboardView = () => {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', background: 'var(--background)' }}>
       {/* Toolbar */}
-      <div style={{ display: 'flex', padding: '0.75rem 1.5rem', background: 'white', borderBottom: '1px solid var(--border)', gap: '0.75rem', alignItems: 'center', zIndex: 10, position: 'relative' }}>
-         <h2 style={{ fontSize: '1rem', fontWeight: 800, margin: 0, marginRight: 'auto' }}>{ws.fileName}</h2>
-         <button onClick={exportToPDF} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 6, padding: '0.4rem 0.75rem', fontSize: '0.75rem', fontWeight: 600, color: '#5f6368', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}><Download size={14}/> PDF Export</button>
-         <button onClick={() => setShowKpiModal(true)} style={{ background: 'var(--primary-light)', border: '1px solid var(--primary)', borderRadius: 6, padding: '0.4rem 0.75rem', fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}><Plus size={14}/> Add KPI</button>
-         <button onClick={() => setShowChartModal(true)} style={{ background: 'var(--primary)', border: 'none', borderRadius: 6, padding: '0.4rem 0.75rem', fontSize: '0.75rem', fontWeight: 700, color: 'white', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}><Plus size={14}/> Add Chart</button>
-      </div>
+      <div style={{ display: 'flex', padding: '0.75rem 1.5rem', background: 'white', borderBottom: '1px solid var(--border)', gap: '1rem', alignItems: 'center', zIndex: 10, flexWrap: 'wrap' }}>
+         <div style={{ display: 'flex', gap: '0.75rem', flex: 1 }}>
+            {filterCols.map(fc => (
+              <div key={fc.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8f9fa', border: '1px solid #e8eaed', padding: '2px 8px', borderRadius: 16 }}>
+                <Filter size={12} color="#5f6368" />
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#5f6368' }}>{fc.name}</span>
+                <select value={activeFilters[fc.name] || ''} onChange={e => setActiveFilters(p => ({ ...p, [fc.name]: e.target.value }))} style={{ background: 'transparent', border: 'none', fontSize: '0.75rem', outline: 'none', cursor: 'pointer', maxWidth: 120 }}>
+                  <option value="">All</option>
+                  {filterOptions[fc.name]?.map(v => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
+            ))}
+         </div>
 
-      {/* Empty State */}
-      {ws.kpiConfigs.length === 0 && ws.chartConfigs.length === 0 && (
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 5 }}>
-           <h2 style={{ color: '#202124', marginBottom: '1rem', fontSize: '1.5rem', fontWeight: 800 }}>Start Building Your Dashboard</h2>
-           <p style={{ color: '#5f6368', maxWidth: 400, textAlign: 'center', marginBottom: '2rem', lineHeight: 1.5 }}>
-              Your data is ready! Click the buttons below to create your first KPI card or Data Chart.
-           </p>
-           <div style={{ display: 'flex', gap: '1rem' }}>
-             <button onClick={() => setShowKpiModal(true)} style={{ padding: '0.75rem 1.5rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: 8, fontSize: '1rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 2px 8px rgba(244,0,9,0.2)' }}><Plus size={18} /> Add KPI</button>
-             <button onClick={() => setShowChartModal(true)} style={{ padding: '0.75rem 1.5rem', background: 'white', color: 'var(--primary)', border: '2px solid var(--primary)', borderRadius: 8, fontSize: '1rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}><Plus size={18} /> Add Chart</button>
-           </div>
-        </div>
-      )}
+         <div style={{ display: 'flex', gap: '0.75rem' }}>
+           <button onClick={exportToPDF} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 6, padding: '0.4rem 0.75rem', fontSize: '0.75rem', fontWeight: 600, color: '#5f6368', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}><Download size={14}/> Export</button>
+           <button onClick={() => setShowKpiModal(true)} style={{ background: 'var(--primary-light)', border: '1px solid var(--primary)', borderRadius: 6, padding: '0.4rem 0.75rem', fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}><Plus size={14}/> Add KPI</button>
+           <button onClick={() => setShowChartModal(true)} style={{ background: 'var(--primary)', border: 'none', borderRadius: 6, padding: '0.4rem 0.75rem', fontSize: '0.75rem', fontWeight: 700, color: 'white', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}><Plus size={14}/> Add Chart</button>
+         </div>
+      </div>
 
       {/* Grid */}
       <div ref={layoutRef} style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', position: 'relative', zIndex: 1 }}>
         {/* @ts-ignore */}
         <ResponsiveGridLayout className="layout" layouts={layouts} breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }} cols={{ lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }} rowHeight={60} onLayoutChange={(l) => updateLayouts(l.map(x=>({i:x.i, x:x.x, y:x.y, w:x.w, h:x.h})))} draggableHandle=".drag-handle" margin={[16, 16]}>
-          {ws.kpiConfigs.map(k => {
-            const sheet = ws.sheets.find(s => s.name === k.sheetName);
-            return <div key={k.id}><KPICard config={k} fallbackRecords={sheet?.records || []} onEdit={() => setShowKpiModal(k)} /></div>;
-          })}
-          {ws.chartConfigs.map(c => {
-            const sheet = ws.sheets.find(s => s.name === c.series[0]?.sheetName);
-            return <div key={c.id}><ChartCard config={c} fallbackRecords={sheet?.records || []} onEdit={() => setShowChartModal(c)} /></div>;
-          })}
+          {kpiConfigs.map(k => (
+            <div key={k.id}><KPICard config={k} activeFilters={activeFilters} onEdit={() => setShowKpiModal(k)} /></div>
+          ))}
+          {chartConfigs.map(c => (
+            <div key={c.id}><ChartCard config={c} activeFilters={activeFilters} onEdit={() => setShowChartModal(c)} /></div>
+          ))}
         </ResponsiveGridLayout>
       </div>
 
@@ -218,55 +256,80 @@ export const DashboardView = () => {
   );
 };
 
-// --- Cards ---
-const KPICard = ({ config, fallbackRecords, onEdit }: any) => {
-  const [val, setVal] = useState<number | null>(null);
-  const [h, setH] = useState(false);
-  const { removeKpi } = useDashboard();
+// --- Cards (Aggregation Logic applied locally on records) ---
+const KPICard = ({ config, activeFilters, onEdit }: any) => {
+  const { records, pinnedCells } = useDashboard();
+  let val: number | string | null = null;
 
-  useEffect(() => {
-    fetch('/api/query', {
-      method: 'POST',
-      body: JSON.stringify({ tableName: config.sheetName, value: config.col, calcCol: config.calcCol, calcOp: config.calcOp, type: 'kpi', fallbackRecords })
-    }).then(r => r.json()).then(d => setVal(d.result)).catch(() => setVal(0));
-  }, [config, fallbackRecords]);
+  if (config.pinnedCellId) {
+    const pc = pinnedCells.find(p => p.id === config.pinnedCellId);
+    val = pc ? pc.value : null;
+  } else {
+    // Filter records by table and active filters
+    const tableRecs = records.filter(r => r.tableId === config.tableId);
+    const filtered = tableRecs.filter(r => {
+      return Object.entries(activeFilters).every(([k, v]) => {
+        if (!v) return true;
+        return String(r.data[k]) === v;
+      });
+    });
+
+    const getSum = (col: string) => col === 'COUNT(Rows)' ? filtered.length : _.sumBy(filtered, r => Number(r.data[col]) || 0);
+
+    if (config.col) {
+      let total = getSum(config.col);
+      if (config.calcCol && config.calcOp) {
+        const valB = getSum(config.calcCol);
+        if (config.calcOp === '+') total += valB;
+        if (config.calcOp === '-') total -= valB;
+        if (config.calcOp === '*') total *= valB;
+        if (config.calcOp === '/') total = valB ? total / valB : 0;
+      }
+      val = total;
+    }
+  }
 
   return (
-    <div onMouseOver={() => setH(true)} onMouseOut={() => setH(false)} style={{ background: 'white', border: '1px solid var(--border)', borderRadius: 12, display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+    <div style={{ background: 'white', border: '1px solid var(--border)', borderRadius: 12, display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
       <div className="drag-handle" style={{ padding: '0.75rem 1rem', cursor: 'grab', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#5f6368', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{config.title || config.col}</div>
+        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#5f6368', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{config.title || config.col || 'KPI'}</div>
         <GripHorizontal size={14} color="#dadce0" />
       </div>
-      <div style={{ position: 'absolute', top: 8, right: 8, opacity: h ? 1 : 0, transition: 'opacity 0.2s', zIndex: 10, display: 'flex', gap: 4 }}>
+      <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 10, display: 'flex', gap: 4 }}>
         <button onClick={onEdit} style={{ padding: 4, borderRadius: 4, color: '#94a3b8', background: 'white', border: '1px solid #e8eaed', cursor: 'pointer' }}><Edit2 size={12} /></button>
-        <button onClick={() => removeKpi(config.id)} style={{ padding: 4, borderRadius: 4, color: '#94a3b8', background: 'white', border: '1px solid #e8eaed', cursor: 'pointer' }}><X size={12} /></button>
       </div>
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', padding: '0 1rem 1rem' }}>
-        {val === null ? <div style={{ width: 40, height: 40, background: '#f1f3f4', borderRadius: 4, animation: 'pulse 1.5s infinite' }} /> : (
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#202124', lineHeight: 1 }}>{fmt(val, config.isPercentage)}</div>
-        )}
+        <div style={{ fontSize: '2rem', fontWeight: 800, color: '#111', lineHeight: 1 }}>{typeof val === 'number' ? fmt(val, config.isPercentage) : (val || '-')}</div>
       </div>
     </div>
   );
 };
 
-const ChartCard = ({ config, fallbackRecords, onEdit }: any) => {
-  const [data, setData] = useState<any[]>([]);
-  const [h, setH] = useState(false);
-  const { removeChart } = useDashboard();
-
-  useEffect(() => {
-    const s0 = config.series[0];
-    if (!s0) return;
-    
-    fetch('/api/query', {
-      method: 'POST',
-      body: JSON.stringify({ tableName: s0.sheetName, groupBy: config.categoryCol, value: s0.valueCol, calcCol: s0.calcCol, calcOp: s0.calcOp, type: 'chart', fallbackRecords })
-    }).then(r => r.json()).then(d => {
-      const formatted = (d.result || []).map((row: any) => ({ name: row.category, value_0: row.value }));
-      setData(formatted);
+const ChartCard = ({ config, activeFilters, onEdit }: any) => {
+  const { records } = useDashboard();
+  
+  const s0 = config.series[0];
+  const tableRecs = records.filter(r => r.tableId === s0?.tableId);
+  const filtered = tableRecs.filter(r => {
+    return Object.entries(activeFilters).every(([k, v]) => {
+      if (!v) return true;
+      return String(r.data[k]) === v;
     });
-  }, [config, fallbackRecords]);
+  });
+
+  const grouped = _.groupBy(filtered, r => r.data[config.categoryCol] || 'Unknown');
+  const data = Object.entries(grouped).map(([category, recs]) => {
+    const getSum = (col: string) => col === 'COUNT(Rows)' ? recs.length : _.sumBy(recs, r => Number(r.data[col]) || 0);
+    let total = s0 ? getSum(s0.valueCol) : 0;
+    if (s0?.calcCol && s0?.calcOp) {
+      const valB = getSum(s0.calcCol);
+      if (s0.calcOp === '+') total += valB;
+      if (s0.calcOp === '-') total -= valB;
+      if (s0.calcOp === '*') total *= valB;
+      if (s0.calcOp === '/') total = valB ? total / valB : 0;
+    }
+    return { name: category, value_0: total };
+  }).sort((a, b) => b.value_0 - a.value_0).slice(0, 50); // top 50
 
   let option: any = { tooltip: {}, legend: {} };
   
@@ -287,14 +350,13 @@ const ChartCard = ({ config, fallbackRecords, onEdit }: any) => {
   }
 
   return (
-    <div onMouseOver={() => setH(true)} onMouseOut={() => setH(false)} style={{ background: 'white', border: '1px solid var(--border)', borderRadius: 12, display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+    <div style={{ background: 'white', border: '1px solid var(--border)', borderRadius: 12, display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
       <div className="drag-handle" style={{ padding: '0.75rem 1rem', cursor: 'grab', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#202124', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{config.title}</div>
+        <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{config.title}</div>
         <GripHorizontal size={14} color="#dadce0" />
       </div>
-      <div style={{ position: 'absolute', top: 10, right: 10, opacity: h ? 1 : 0, transition: 'opacity 0.2s', zIndex: 10, display: 'flex', gap: 4 }}>
+      <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 10, display: 'flex', gap: 4 }}>
         <button onClick={onEdit} style={{ padding: 4, borderRadius: 4, color: '#94a3b8', background: 'white', border: '1px solid #e8eaed', cursor: 'pointer' }}><Edit2 size={12} /></button>
-        <button onClick={() => removeChart(config.id)} style={{ padding: 4, borderRadius: 4, color: '#94a3b8', background: 'white', border: '1px solid #e8eaed', cursor: 'pointer' }}><X size={12} /></button>
       </div>
       <div style={{ flex: 1, minHeight: 0, padding: '0.5rem' }}>
         <ReactECharts option={option} style={{ height: '100%', width: '100%' }} />
