@@ -185,8 +185,8 @@ export const DashboardView = () => {
   const [activeFilters, setActiveFilters] = useState<Record<string, string>>({}); // { "colName": "val" }
   const layoutRef = useRef<HTMLDivElement>(null);
 
-  const layoutKpis = kpiConfigs.map(k => ({ i: k.id, x: k.x ?? 0, y: k.y ?? 0, w: k.w ?? 3, h: k.h ?? 2, minW: 2, minH: 2 }));
-  const layoutCharts = chartConfigs.map(c => ({ i: c.id, x: c.x ?? 0, y: c.y ?? 2, w: c.w ?? 6, h: c.h ?? 5, minW: 3, minH: 4 }));
+  const layoutKpis = kpiConfigs.map(k => ({ i: k.id, x: k.x ?? 0, y: k.y ?? 0, w: k.w ?? 6, h: k.h ?? 2, minW: 3, minH: 2 }));
+  const layoutCharts = chartConfigs.map(c => ({ i: c.id, x: c.x ?? 0, y: c.y ?? 2, w: c.w ?? 12, h: c.h ?? 5, minW: 4, minH: 4 }));
   const layouts = { lg: [...layoutKpis, ...layoutCharts] };
 
   const filterCols = columns.filter(c => c.isFilter);
@@ -214,39 +214,44 @@ export const DashboardView = () => {
   };
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', background: '#ffffff' }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', background: '#111111' }}>
       <style>{`
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .react-grid-item.react-grid-placeholder { background: rgba(0,0,0,0.05) !important; border-radius: 16px; }
+        .react-grid-item.react-grid-placeholder { background: rgba(255,255,255,0.05) !important; border-radius: 16px; }
       `}</style>
-      {/* Toolbar */}
-      <div style={{ display: 'flex', padding: '1rem 1.5rem', background: 'white', gap: '1rem', alignItems: 'center', zIndex: 10, flexWrap: 'wrap', justifyContent: 'space-between' }}>
-         <div style={{ display: 'flex', gap: '0.75rem', flex: 1 }}>
-            {filterCols.map(fc => {
-              const isActive = !!activeFilters[fc.name];
-              return (
-                <div key={fc.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: isActive ? '#111' : 'white', border: isActive ? '1px solid #111' : '1px solid #dadce0', padding: '0.4rem 1rem', borderRadius: 24, transition: 'all 0.2s' }}>
-                  <span style={{ fontSize: '0.85rem', fontWeight: 500, color: isActive ? 'white' : '#5f6368' }}>{isActive ? `${fc.name}:` : `+ ${fc.name}`}</span>
-                  <select value={activeFilters[fc.name] || ''} onChange={e => setActiveFilters(p => ({ ...p, [fc.name]: e.target.value }))} style={{ background: 'transparent', border: 'none', fontSize: '0.85rem', fontWeight: 600, color: isActive ? 'white' : '#111', outline: 'none', cursor: 'pointer', maxWidth: 120 }}>
-                    <option value="">All</option>
-                    {filterOptions[fc.name]?.map(v => <option key={v} value={v}>{v}</option>)}
-                  </select>
-                </div>
-              );
-            })}
-         </div>
+      {/* Header & Toolbar */}
+      <div style={{ display: 'flex', flexDirection: 'column', background: '#E3001B', padding: '1.5rem', borderBottom: '1px solid #C20017', zIndex: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+          <div>
+            <div style={{ fontSize: '2rem', fontWeight: 600, color: 'white', fontStyle: 'italic', letterSpacing: '-0.5px' }}>Coca-Cola HBC</div>
+            <div style={{ fontSize: '0.9rem', fontWeight: 400, color: 'rgba(255,255,255,0.9)', marginTop: 4 }}>Bottling & distribution intelligence</div>
+          </div>
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <button onClick={() => setShowKpiModal(true)} style={{ background: 'white', border: 'none', borderRadius: 24, padding: '0.5rem 1.25rem', fontSize: '0.85rem', fontWeight: 600, color: '#E3001B', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>+ KPI</button>
+            <button onClick={() => setShowChartModal(true)} style={{ background: 'white', border: 'none', borderRadius: 24, padding: '0.5rem 1.25rem', fontSize: '0.85rem', fontWeight: 600, color: '#E3001B', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>+ Chart</button>
+            <button onClick={exportToPDF} style={{ background: '#111', border: 'none', borderRadius: 24, padding: '0.5rem 1.25rem', fontSize: '0.85rem', fontWeight: 600, color: 'white', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>Export</button>
+          </div>
+        </div>
 
-         <div style={{ display: 'flex', gap: '0.75rem' }}>
-           <button onClick={() => setShowKpiModal(true)} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 24, padding: '0.5rem 1.25rem', fontSize: '0.85rem', fontWeight: 600, color: '#111', cursor: 'pointer' }}>+ KPI</button>
-           <button onClick={() => setShowChartModal(true)} style={{ background: '#111', border: 'none', borderRadius: 24, padding: '0.5rem 1.25rem', fontSize: '0.85rem', fontWeight: 600, color: 'white', cursor: 'pointer' }}>+ Chart</button>
-           <button onClick={exportToPDF} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 24, padding: '0.5rem 1.25rem', fontSize: '0.85rem', fontWeight: 600, color: '#111', cursor: 'pointer' }}>Export</button>
-         </div>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          {filterCols.map(fc => {
+            const isActive = !!activeFilters[fc.name];
+            return (
+              <div key={fc.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: isActive ? '#111' : 'rgba(255,255,255,0.15)', border: 'none', padding: '0.4rem 1rem', borderRadius: 24, transition: 'all 0.2s' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'white' }}>{isActive ? `${fc.name}:` : `+ ${fc.name}`}</span>
+                <select value={activeFilters[fc.name] || ''} onChange={e => setActiveFilters(p => ({ ...p, [fc.name]: e.target.value }))} style={{ background: 'transparent', border: 'none', fontSize: '0.85rem', fontWeight: 600, color: 'white', outline: 'none', cursor: 'pointer', maxWidth: 120 }}>
+                  <option value="" style={{ color: 'black' }}>All</option>
+                  {filterOptions[fc.name]?.map(v => <option key={v} value={v} style={{ color: 'black' }}>{v}</option>)}
+                </select>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Grid */}
       <div ref={layoutRef} style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', position: 'relative', zIndex: 1 }}>
-        {/* @ts-ignore */}
-        <ResponsiveGridLayout className="layout" layouts={layouts} breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }} cols={{ lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }} rowHeight={60} onLayoutChange={(l) => updateLayouts(l.map(x=>({i:x.i, x:x.x, y:x.y, w:x.w, h:x.h})))} draggableHandle=".drag-handle" margin={[16, 16]} compactType={null} preventCollision={false}>
+        <ResponsiveGridLayout className="layout" layouts={layouts} breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }} cols={{ lg: 24, md: 20, sm: 12, xs: 8, xxs: 4 }} rowHeight={60} onLayoutChange={(l) => updateLayouts(l.map(x=>({i:x.i, x:x.x, y:x.y, w:x.w, h:x.h})))} draggableHandle=".drag-handle" margin={[24, 24]} compactType={null} preventCollision={false}>
           {kpiConfigs.map(k => (
             <div key={k.id}><KPICard config={k} activeFilters={activeFilters} onEdit={() => setShowKpiModal(k)} /></div>
           ))}
@@ -297,15 +302,15 @@ const KPICard = ({ config, activeFilters, onEdit }: any) => {
 
   const isPinned = !!config.pinnedCellId;
   return (
-    <div style={{ background: isPinned ? '#FCF1F2' : '#F7F5F0', border: isPinned ? '1px solid #E3001B' : '1px solid transparent', borderRadius: 16, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '1.25rem', height: '100%', position: 'relative', animation: 'fadeIn 0.6s ease-out' }}>
+    <div style={{ background: '#222222', border: isPinned ? '1px solid #E3001B' : '1px solid #333', borderRadius: 16, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '1.25rem', height: '100%', position: 'relative', animation: 'fadeIn 0.6s ease-out' }}>
       <div className="drag-handle" style={{ position: 'absolute', inset: 0, cursor: 'grab', zIndex: 1 }}></div>
       <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}>
-        <button onClick={onEdit} style={{ padding: 4, borderRadius: 4, color: '#a1a1aa', background: 'transparent', border: 'none', cursor: 'pointer' }}><Edit2 size={12} /></button>
+        <button onClick={onEdit} style={{ padding: 4, borderRadius: 4, color: '#666', background: 'transparent', border: 'none', cursor: 'pointer' }}><Edit2 size={12} /></button>
       </div>
-      <div style={{ fontSize: '0.85rem', fontWeight: 500, color: isPinned ? '#E3001B' : '#777', marginBottom: '0.5rem', zIndex: 2 }}>
+      <div style={{ fontSize: '0.85rem', fontWeight: 500, color: isPinned ? '#E3001B' : '#A0A0A0', marginBottom: '0.5rem', zIndex: 2 }}>
         {config.title || config.col || 'KPI'}
       </div>
-      <div style={{ fontSize: '2.5rem', fontWeight: 500, color: isPinned ? '#E3001B' : '#111', lineHeight: 1, zIndex: 2, letterSpacing: '-1px' }}>
+      <div style={{ fontSize: '2.5rem', fontWeight: 500, color: isPinned ? '#E3001B' : '#FFFFFF', lineHeight: 1, zIndex: 2, letterSpacing: '-1px' }}>
         {typeof val === 'number' ? fmt(val, config.isPercentage) : (val || '-')}
       </div>
     </div>
@@ -342,8 +347,8 @@ const ChartCard = ({ config, activeFilters, onEdit }: any) => {
   
   if (config.type === 'pie' || config.type === 'doughnut') {
     option = {
-      tooltip: { trigger: 'item', formatter: (p: any) => `<b>${p.name}</b><br/>${p.marker} ${fmt(p.value, config.isPercentage)}` },
-      legend: { type: 'scroll', orient: 'vertical', right: 10, top: 'middle', textStyle: { fontSize: 11, color: '#555' }, icon: 'circle' },
+      tooltip: { trigger: 'item', backgroundColor: '#333', textStyle: { color: '#fff' }, borderWidth: 0, formatter: (p: any) => `<b>${p.name}</b><br/>${p.marker} ${fmt(p.value, config.isPercentage)}` },
+      legend: { type: 'scroll', orient: 'vertical', right: 10, top: 'middle', textStyle: { fontSize: 11, color: '#A0A0A0' }, icon: 'circle' },
       series: [{ 
         type: 'pie', 
         radius: config.type === 'doughnut' ? ['50%', '75%'] : '75%', 
@@ -355,22 +360,30 @@ const ChartCard = ({ config, activeFilters, onEdit }: any) => {
     };
   } else {
     option = {
-      tooltip: { trigger: 'axis', formatter: (params: any[]) => `${params[0].name}<br/>` + params.map((p: any) => `${p.marker} ${fmt(p.value, config.isPercentage)}`).join('<br/>') },
+      tooltip: { trigger: 'axis', backgroundColor: '#333', textStyle: { color: '#fff' }, borderWidth: 0, formatter: (params: any[]) => `${params[0].name}<br/>` + params.map((p: any) => `${p.marker} ${fmt(p.value, config.isPercentage)}`).join('<br/>') },
       grid: { left: '3%', right: '4%', bottom: '5%', top: '15%', containLabel: true },
       xAxis: { type: 'category', data: data.map(d => d.name), axisLabel: { fontSize: 10, color: '#888' }, axisLine: { show: false }, axisTick: { show: false } },
       yAxis: { type: 'value', axisLabel: { show: false }, splitLine: { show: false } },
-      series: [{ type: config.type, itemStyle: { color: '#E3001B', borderRadius: [4, 4, 0, 0] }, barWidth: '60%', data: data.map((d, i) => ({ value: d.value_0, itemStyle: { color: i === 2 ? '#111111' : '#E3001B' } })) }]
+      series: [{ 
+        type: config.type, 
+        barWidth: '60%', 
+        itemStyle: { 
+          color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#EAA700' }, { offset: 1, color: '#E3001B' }] },
+          borderRadius: [4, 4, 0, 0] 
+        },
+        data: data.map((d, i) => ({ value: d.value_0, itemStyle: { color: i === 2 ? '#333333' : undefined } })) 
+      }]
     };
   }
 
   return (
-    <div style={{ background: '#F7F5F0', borderRadius: 16, display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', animation: 'fadeIn 0.6s ease-out' }}>
+    <div style={{ background: '#222222', border: '1px solid #333', borderRadius: 16, display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', animation: 'fadeIn 0.6s ease-out' }}>
       <div className="drag-handle" style={{ position: 'absolute', inset: 0, cursor: 'grab', zIndex: 1 }}></div>
       <div style={{ textAlign: 'left', padding: '1rem 1.25rem 0 1.25rem', zIndex: 2 }}>
-        <div style={{ fontSize: '0.95rem', fontWeight: 500, color: '#777' }}>{config.title}</div>
+        <div style={{ fontSize: '0.95rem', fontWeight: 500, color: '#A0A0A0' }}>{config.title}</div>
       </div>
       <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 10 }}>
-        <button onClick={onEdit} style={{ padding: 4, borderRadius: 4, color: '#a1a1aa', background: 'transparent', border: 'none', cursor: 'pointer' }}><Edit2 size={12} /></button>
+        <button onClick={onEdit} style={{ padding: 4, borderRadius: 4, color: '#666', background: 'transparent', border: 'none', cursor: 'pointer' }}><Edit2 size={12} /></button>
       </div>
       <div style={{ flex: 1, minHeight: 0, zIndex: 2, pointerEvents: 'none', padding: '0.5rem' }}>
         <ReactECharts option={option} style={{ height: '100%', width: '100%', pointerEvents: 'auto' }} />
