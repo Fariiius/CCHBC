@@ -76,32 +76,6 @@ export const Dashboard = () => {
     });
   };
 
-  const handleDragStart = (e: React.DragEvent, rowId: string) => {
-    setDraggedRowId(rowId);
-    e.dataTransfer.effectAllowed = 'move';
-    setTimeout(() => { if (e.target instanceof HTMLElement) e.target.style.opacity = '0.5'; }, 0);
-  };
-
-  const handleDragOver = (e: React.DragEvent, targetRowId: string) => {
-    e.preventDefault();
-    if (!draggedRowId || draggedRowId === targetRowId || !activeConfig) return;
-    
-    const newOrder = [...(activeConfig.rowOrder || [])];
-    const fromIdx = newOrder.indexOf(draggedRowId);
-    const toIdx = newOrder.indexOf(targetRowId);
-    
-    if (fromIdx !== -1 && toIdx !== -1) {
-      newOrder.splice(fromIdx, 1);
-      newOrder.splice(toIdx, 0, draggedRowId);
-      updatePrepConfig(activeConfig.id, { rowOrder: newOrder });
-    }
-  };
-
-  const handleDragEnd = (e: React.DragEvent) => {
-    setDraggedRowId(null);
-    if (e.target instanceof HTMLElement) e.target.style.opacity = '1';
-  };
-
   React.useEffect(() => {
     if (stagingWorkspace && stagingWorkspace.configs && stagingWorkspace.configs.length > 0 && (!activeTabId || !stagingWorkspace.configs.find(c => c.id === activeTabId))) {
       setActiveTabId(stagingWorkspace.configs[0].id);
@@ -187,12 +161,16 @@ export const Dashboard = () => {
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden', background: 'var(--background)' }}>
           {/* Studio Sidebar */}
           <div style={{ width: 280, background: 'var(--surface)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-            <div style={{ padding: '1.5rem 1.25rem', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                <LayoutTemplate size={18} color="var(--primary)" />
-                <h2 style={{ fontSize: '1rem', fontWeight: 800 }}>Data Prep Studio</h2>
-              </div>
-              <p style={{ color: '#5f6368', fontSize: '0.75rem', lineHeight: 1.4 }}>Configure sheets, cleanse rows, and map columns before importing.</p>
+            <div style={{ padding: '1.5rem 1rem', borderBottom: '1px solid var(--border)' }}>
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '0.25rem' }}>Data Studio</h2>
+              <p style={{ fontSize: '0.75rem', color: '#5f6368', lineHeight: 1.4, marginBottom: '1rem' }}>Review detected tables, select metrics, and configure charts before importing.</p>
+              
+              <button 
+                onClick={confirmStaging}
+                style={{ width: '100%', padding: '0.75rem', background: 'var(--primary)', color: 'white', borderRadius: 6, fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, boxShadow: '0 2px 8px rgba(244,0,9,0.2)' }}
+              >
+                <ArrowDownToLine size={16} /> Import to Dashboard
+              </button>
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
@@ -235,10 +213,7 @@ export const Dashboard = () => {
             </div>
 
             <div style={{ padding: '1.25rem', borderTop: '1px solid var(--border)', background: '#f8f9fa' }}>
-              <button onClick={() => confirmStaging()} disabled={loading} style={{ width: '100%', padding: '0.75rem', borderRadius: 6, fontWeight: 700, color: 'white', background: 'var(--primary)', border: 'none', cursor: loading ? 'not-allowed' : 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', boxShadow: '0 2px 4px rgba(26, 115, 232, 0.2)' }}>
-                {loading ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : 'Import to Dashboard'}
-              </button>
-              <button onClick={cancelStaging} style={{ width: '100%', padding: '0.5rem', marginTop: '0.5rem', borderRadius: 6, fontWeight: 600, color: '#5f6368', background: 'transparent', border: 'none', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={cancelStaging} style={{ width: '100%', padding: '0.5rem', borderRadius: 6, fontWeight: 600, color: '#5f6368', background: 'transparent', border: 'none', cursor: 'pointer' }}>Cancel</button>
             </div>
           </div>
 
@@ -355,16 +330,11 @@ export const Dashboard = () => {
                           return (
                             <tr 
                               key={rowId} 
-                              draggable
-                              onDragStart={(e) => handleDragStart(e, rowId)}
-                              onDragOver={(e) => handleDragOver(e, rowId)}
-                              onDragEnd={handleDragEnd}
                               style={{
                                 background: isHeader ? '#e8f0fe' : (isEndRow ? '#fce8e6' : (isExcluded ? '#f8f9fa' : 'white')),
                                 opacity: isExcluded && !isHeader && !isEndRow ? 0.4 : 1,
                                 borderBottom: '1px solid var(--border)',
-                                transition: 'background 0.2s',
-                                cursor: 'grab'
+                                transition: 'background 0.2s'
                               }}
                             >
                               <td style={{ padding: '0.5rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -466,12 +436,17 @@ export const Dashboard = () => {
                            if (!label) return;
                            
                            const vals = localSelectedCells.map(sc => {
-                              const [rId, cIdxStr] = sc.split('_');
-                              const cIdx = parseInt(cIdxStr);
-                              const origIdx = rId.startsWith('orig_') ? parseInt(rId.replace('orig_', '')) : -1;
-                              const row = rId.startsWith('orig_') ? activeConfig.rawPreview[origIdx] : activeConfig.addedRows[rId];
-                              const cellVal = activeConfig.cellEdits && activeConfig.cellEdits[sc] !== undefined ? activeConfig.cellEdits[sc] : (row ? row[cIdx] : 0);
-                              return cellVal;
+                              try {
+                                 const [rId, cIdxStr] = sc.split('_');
+                                 const cIdx = parseInt(cIdxStr);
+                                 const origIdx = rId.startsWith('orig_') ? parseInt(rId.replace('orig_', '')) : -1;
+                                 let row = rId.startsWith('orig_') ? activeConfig.rawPreview[origIdx] : activeConfig.addedRows[rId];
+                                 if (!row) row = [];
+                                 const cellVal = activeConfig.cellEdits && activeConfig.cellEdits[sc] !== undefined ? activeConfig.cellEdits[sc] : (row[cIdx] !== undefined ? row[cIdx] : 0);
+                                 return cellVal;
+                              } catch (e) {
+                                 return 0;
+                              }
                            });
                            
                            // Try to sum if numeric

@@ -261,7 +261,7 @@ export const DashboardView = () => {
       
       {/* Main Dashboard Area */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0, position: 'relative' }}>
-        <div style={{ display: 'flex', padding: '0.5rem 1rem', background: '#f1f3f4', borderBottom: '1px solid #e8eaed', gap: '0.5rem', justifyContent: 'flex-end', zIndex: 10 }}>
+        <div style={{ display: 'flex', padding: '0.5rem 1rem', background: '#f1f3f4', borderBottom: '1px solid #e8eaed', gap: '0.5rem', justifyContent: 'flex-end', zIndex: 10, position: 'relative' }}>
            <button onClick={exportToPDF} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 4, padding: '0.3rem 0.6rem', fontSize: '0.7rem', fontWeight: 600, color: '#5f6368', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}><Download size={12}/> PDF Export</button>
            <button onClick={() => setShowKpiModal(true)} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 4, padding: '0.3rem 0.6rem', fontSize: '0.7rem', fontWeight: 600, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', marginLeft: 'auto' }}><Plus size={12}/> KPI</button>
            <button onClick={() => setShowChartModal(true)} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 4, padding: '0.3rem 0.6rem', fontSize: '0.7rem', fontWeight: 600, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}><Plus size={12}/> Chart</button>
@@ -269,10 +269,18 @@ export const DashboardView = () => {
         
         {ws.kpiConfigs.length === 0 && ws.chartConfigs.length === 0 && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--background)' }}>
-             <h2 style={{ color: '#5f6368', marginBottom: '0.5rem' }}>Dashboard is Empty</h2>
-             <p style={{ color: '#9aa0a6', maxWidth: 400, textAlign: 'center', marginBottom: '1.5rem' }}>
-                You removed AI auto-generation. Click the buttons above to manually add KPIs and Charts based on your Data Prep explicit mappings.
+             <h2 style={{ color: '#202124', marginBottom: '1rem', fontSize: '1.5rem', fontWeight: 800 }}>Start Building Your Dashboard</h2>
+             <p style={{ color: '#5f6368', maxWidth: 400, textAlign: 'center', marginBottom: '2rem', lineHeight: 1.5 }}>
+                Your data is ready! Click the buttons below to create your first KPI card or Data Chart.
              </p>
+             <div style={{ display: 'flex', gap: '1rem' }}>
+               <button onClick={() => setShowKpiModal(true)} style={{ padding: '0.75rem 1.5rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: 8, fontSize: '1rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 2px 8px rgba(244,0,9,0.2)' }}>
+                 <Plus size={18} /> Add KPI Card
+               </button>
+               <button onClick={() => setShowChartModal(true)} style={{ padding: '0.75rem 1.5rem', background: 'white', color: 'var(--primary)', border: '2px solid var(--primary)', borderRadius: 8, fontSize: '1rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+                 <Plus size={18} /> Add Chart
+               </button>
+             </div>
           </div>
         )}
         
