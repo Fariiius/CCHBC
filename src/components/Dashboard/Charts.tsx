@@ -15,8 +15,8 @@ const COLORS = ['#F40009', '#111111', '#555555', '#999999', '#D90008'];
 // --- Helpers ---
 const fmt = (val: number, isPerc?: boolean) => {
   if (isNaN(val) || val == null) return '-';
-  if (isPerc) return (val * 100).toFixed(1) + '%';
-  return val >= 1000000000 ? (val/1000000000).toFixed(1) + 'B' : val >= 1000000 ? (val/1000000).toFixed(1) + 'M' : val >= 1000 ? (val/1000).toFixed(1) + 'k' : val.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  if (isPerc) return (val * 100).toFixed(0) + '%';
+  return val >= 1000000000 ? (val/1000000000).toFixed(2) + 'bn' : val >= 1000000 ? (val/1000000).toFixed(2) + 'M' : val >= 1000 ? (val/1000).toFixed(2) + 'k' : val.toLocaleString(undefined, { maximumFractionDigits: 2 });
 };
 
 // --- Modals ---
@@ -214,7 +214,11 @@ export const DashboardView = () => {
   };
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', background: 'var(--background)' }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', background: '#e8ecef' }}>
+      <style>{`
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .react-grid-item.react-grid-placeholder { background: rgba(0,0,0,0.05) !important; border-radius: 12px; }
+      `}</style>
       {/* Toolbar */}
       <div style={{ display: 'flex', padding: '0.75rem 1.5rem', background: 'white', borderBottom: '1px solid var(--border)', gap: '1rem', alignItems: 'center', zIndex: 10, flexWrap: 'wrap' }}>
          <div style={{ display: 'flex', gap: '0.75rem', flex: 1 }}>
@@ -290,16 +294,16 @@ const KPICard = ({ config, activeFilters, onEdit }: any) => {
   }
 
   return (
-    <div style={{ background: 'white', border: '1px solid var(--border)', borderRadius: 12, display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-      <div className="drag-handle" style={{ padding: '0.75rem 1rem', cursor: 'grab', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#5f6368', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{config.title || config.col || 'KPI'}</div>
-        <GripHorizontal size={14} color="#dadce0" />
+    <div style={{ background: 'transparent', borderRadius: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', position: 'relative', animation: 'fadeIn 0.6s ease-out' }}>
+      <div className="drag-handle" style={{ position: 'absolute', inset: 0, cursor: 'grab', zIndex: 1 }}></div>
+      <div style={{ position: 'absolute', top: 0, right: 0, zIndex: 10 }}>
+        <button onClick={onEdit} style={{ padding: 4, borderRadius: 4, color: '#a1a1aa', background: 'transparent', border: 'none', cursor: 'pointer' }}><Edit2 size={12} /></button>
       </div>
-      <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 10, display: 'flex', gap: 4 }}>
-        <button onClick={onEdit} style={{ padding: 4, borderRadius: 4, color: '#94a3b8', background: 'white', border: '1px solid #e8eaed', cursor: 'pointer' }}><Edit2 size={12} /></button>
+      <div style={{ fontSize: '2.5rem', fontWeight: 600, color: '#111', lineHeight: 1, zIndex: 2 }}>
+        {typeof val === 'number' ? fmt(val, config.isPercentage) : (val || '-')}
       </div>
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', padding: '0 1rem 1rem' }}>
-        <div style={{ fontSize: '2rem', fontWeight: 800, color: '#111', lineHeight: 1 }}>{typeof val === 'number' ? fmt(val, config.isPercentage) : (val || '-')}</div>
+      <div style={{ fontSize: '0.85rem', fontWeight: 500, color: '#666', marginTop: '0.5rem', zIndex: 2 }}>
+        {config.title || config.col || 'KPI'}
       </div>
     </div>
   );
@@ -336,13 +340,13 @@ const ChartCard = ({ config, activeFilters, onEdit }: any) => {
   if (config.type === 'pie' || config.type === 'doughnut') {
     option = {
       tooltip: { trigger: 'item', formatter: (p: any) => `<b>${p.name}</b><br/>${p.marker} ${fmt(p.value, config.isPercentage)}${config.isPercentage ? '' : ` (${p.percent}%)`}` },
-      legend: { bottom: 0, textStyle: { fontSize: 10 } },
       series: [{ 
         type: 'pie', 
-        radius: config.type === 'doughnut' ? ['40%', '70%'] : '70%', 
-        center: ['50%', '45%'], 
+        radius: config.type === 'doughnut' ? ['35%', '60%'] : '60%', 
+        center: ['50%', '55%'], 
         data: data.map(d => ({ name: d.name, value: d.value_0 })),
-        label: { formatter: (p: any) => `${p.name}: ${fmt(p.value, config.isPercentage)}` }
+        label: { show: true, position: 'outside', formatter: (p: any) => `${p.name} ${fmt(p.value, config.isPercentage)}`, color: '#333', fontSize: 11 },
+        labelLine: { show: true, length: 15, length2: 10 }
       }]
     };
   } else {
@@ -356,16 +360,16 @@ const ChartCard = ({ config, activeFilters, onEdit }: any) => {
   }
 
   return (
-    <div style={{ background: 'white', border: '1px solid var(--border)', borderRadius: 12, display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-      <div className="drag-handle" style={{ padding: '0.75rem 1rem', cursor: 'grab', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{config.title}</div>
-        <GripHorizontal size={14} color="#dadce0" />
+    <div style={{ background: 'transparent', borderRadius: 12, display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', animation: 'fadeIn 0.6s ease-out' }}>
+      <div className="drag-handle" style={{ position: 'absolute', inset: 0, cursor: 'grab', zIndex: 1 }}></div>
+      <div style={{ textAlign: 'center', padding: '0.75rem', zIndex: 2 }}>
+        <div style={{ fontSize: '1rem', fontWeight: 500, color: '#333' }}>{config.title}</div>
       </div>
-      <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 10, display: 'flex', gap: 4 }}>
-        <button onClick={onEdit} style={{ padding: 4, borderRadius: 4, color: '#94a3b8', background: 'white', border: '1px solid #e8eaed', cursor: 'pointer' }}><Edit2 size={12} /></button>
+      <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}>
+        <button onClick={onEdit} style={{ padding: 4, borderRadius: 4, color: '#a1a1aa', background: 'transparent', border: 'none', cursor: 'pointer' }}><Edit2 size={12} /></button>
       </div>
-      <div style={{ flex: 1, minHeight: 0, padding: '0.5rem' }}>
-        <ReactECharts option={option} style={{ height: '100%', width: '100%' }} />
+      <div style={{ flex: 1, minHeight: 0, zIndex: 2, pointerEvents: 'none' }}>
+        <ReactECharts option={option} style={{ height: '100%', width: '100%', pointerEvents: 'auto' }} />
       </div>
     </div>
   );
