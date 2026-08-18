@@ -10,7 +10,7 @@ import 'react-resizable/css/styles.css';
 import { Edit2, X, Plus, GripHorizontal, Download, Filter } from 'lucide-react';
 import _ from 'lodash';
 
-const COLORS = ['#F40009', '#111111', '#555555', '#999999', '#D90008'];
+const COLORS = ['#E3001B', '#EAA700', '#111111', '#cccccc'];
 
 // --- Helpers ---
 const fmt = (val: number, isPerc?: boolean) => {
@@ -214,30 +214,32 @@ export const DashboardView = () => {
   };
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', background: '#e8ecef' }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', background: '#ffffff' }}>
       <style>{`
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .react-grid-item.react-grid-placeholder { background: rgba(0,0,0,0.05) !important; border-radius: 12px; }
+        .react-grid-item.react-grid-placeholder { background: rgba(0,0,0,0.05) !important; border-radius: 16px; }
       `}</style>
       {/* Toolbar */}
-      <div style={{ display: 'flex', padding: '0.75rem 1.5rem', background: 'white', borderBottom: '1px solid var(--border)', gap: '1rem', alignItems: 'center', zIndex: 10, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', padding: '1rem 1.5rem', background: 'white', gap: '1rem', alignItems: 'center', zIndex: 10, flexWrap: 'wrap', justifyContent: 'space-between' }}>
          <div style={{ display: 'flex', gap: '0.75rem', flex: 1 }}>
-            {filterCols.map(fc => (
-              <div key={fc.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8f9fa', border: '1px solid #e8eaed', padding: '2px 8px', borderRadius: 16 }}>
-                <Filter size={12} color="#5f6368" />
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#5f6368' }}>{fc.name}</span>
-                <select value={activeFilters[fc.name] || ''} onChange={e => setActiveFilters(p => ({ ...p, [fc.name]: e.target.value }))} style={{ background: 'transparent', border: 'none', fontSize: '0.75rem', outline: 'none', cursor: 'pointer', maxWidth: 120 }}>
-                  <option value="">All</option>
-                  {filterOptions[fc.name]?.map(v => <option key={v} value={v}>{v}</option>)}
-                </select>
-              </div>
-            ))}
+            {filterCols.map(fc => {
+              const isActive = !!activeFilters[fc.name];
+              return (
+                <div key={fc.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: isActive ? '#111' : 'white', border: isActive ? '1px solid #111' : '1px solid #dadce0', padding: '0.4rem 1rem', borderRadius: 24, transition: 'all 0.2s' }}>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 500, color: isActive ? 'white' : '#5f6368' }}>{isActive ? `${fc.name}:` : `+ ${fc.name}`}</span>
+                  <select value={activeFilters[fc.name] || ''} onChange={e => setActiveFilters(p => ({ ...p, [fc.name]: e.target.value }))} style={{ background: 'transparent', border: 'none', fontSize: '0.85rem', fontWeight: 600, color: isActive ? 'white' : '#111', outline: 'none', cursor: 'pointer', maxWidth: 120 }}>
+                    <option value="">All</option>
+                    {filterOptions[fc.name]?.map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                </div>
+              );
+            })}
          </div>
 
          <div style={{ display: 'flex', gap: '0.75rem' }}>
-           <button onClick={exportToPDF} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 6, padding: '0.4rem 0.75rem', fontSize: '0.75rem', fontWeight: 600, color: '#5f6368', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}><Download size={14}/> Export</button>
-           <button onClick={() => setShowKpiModal(true)} style={{ background: 'var(--primary-light)', border: '1px solid var(--primary)', borderRadius: 6, padding: '0.4rem 0.75rem', fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}><Plus size={14}/> Add KPI</button>
-           <button onClick={() => setShowChartModal(true)} style={{ background: 'var(--primary)', border: 'none', borderRadius: 6, padding: '0.4rem 0.75rem', fontSize: '0.75rem', fontWeight: 700, color: 'white', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}><Plus size={14}/> Add Chart</button>
+           <button onClick={() => setShowKpiModal(true)} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 24, padding: '0.5rem 1.25rem', fontSize: '0.85rem', fontWeight: 600, color: '#111', cursor: 'pointer' }}>+ KPI</button>
+           <button onClick={() => setShowChartModal(true)} style={{ background: '#111', border: 'none', borderRadius: 24, padding: '0.5rem 1.25rem', fontSize: '0.85rem', fontWeight: 600, color: 'white', cursor: 'pointer' }}>+ Chart</button>
+           <button onClick={exportToPDF} style={{ background: 'white', border: '1px solid #dadce0', borderRadius: 24, padding: '0.5rem 1.25rem', fontSize: '0.85rem', fontWeight: 600, color: '#111', cursor: 'pointer' }}>Export</button>
          </div>
       </div>
 
@@ -293,17 +295,18 @@ const KPICard = ({ config, activeFilters, onEdit }: any) => {
     }
   }
 
+  const isPinned = !!config.pinnedCellId;
   return (
-    <div style={{ background: 'transparent', borderRadius: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', position: 'relative', animation: 'fadeIn 0.6s ease-out' }}>
+    <div style={{ background: isPinned ? '#FCF1F2' : '#F7F5F0', border: isPinned ? '1px solid #E3001B' : '1px solid transparent', borderRadius: 16, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '1.25rem', height: '100%', position: 'relative', animation: 'fadeIn 0.6s ease-out' }}>
       <div className="drag-handle" style={{ position: 'absolute', inset: 0, cursor: 'grab', zIndex: 1 }}></div>
-      <div style={{ position: 'absolute', top: 0, right: 0, zIndex: 10 }}>
+      <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}>
         <button onClick={onEdit} style={{ padding: 4, borderRadius: 4, color: '#a1a1aa', background: 'transparent', border: 'none', cursor: 'pointer' }}><Edit2 size={12} /></button>
       </div>
-      <div style={{ fontSize: '2.5rem', fontWeight: 600, color: '#111', lineHeight: 1, zIndex: 2 }}>
-        {typeof val === 'number' ? fmt(val, config.isPercentage) : (val || '-')}
-      </div>
-      <div style={{ fontSize: '0.85rem', fontWeight: 500, color: '#666', marginTop: '0.5rem', zIndex: 2 }}>
+      <div style={{ fontSize: '0.85rem', fontWeight: 500, color: isPinned ? '#E3001B' : '#777', marginBottom: '0.5rem', zIndex: 2 }}>
         {config.title || config.col || 'KPI'}
+      </div>
+      <div style={{ fontSize: '2.5rem', fontWeight: 500, color: isPinned ? '#E3001B' : '#111', lineHeight: 1, zIndex: 2, letterSpacing: '-1px' }}>
+        {typeof val === 'number' ? fmt(val, config.isPercentage) : (val || '-')}
       </div>
     </div>
   );
@@ -340,35 +343,36 @@ const ChartCard = ({ config, activeFilters, onEdit }: any) => {
   if (config.type === 'pie' || config.type === 'doughnut') {
     option = {
       tooltip: { trigger: 'item', formatter: (p: any) => `<b>${p.name}</b><br/>${p.marker} ${fmt(p.value, config.isPercentage)}${config.isPercentage ? '' : ` (${p.percent}%)`}` },
+      legend: { type: 'scroll', orient: 'vertical', right: 10, top: 'middle', textStyle: { fontSize: 11, color: '#555' }, icon: 'circle' },
       series: [{ 
         type: 'pie', 
-        radius: config.type === 'doughnut' ? ['35%', '60%'] : '60%', 
-        center: ['50%', '55%'], 
-        data: data.map(d => ({ name: d.name, value: d.value_0 })),
-        label: { show: true, position: 'outside', formatter: (p: any) => `${p.name} ${fmt(p.value, config.isPercentage)}`, color: '#333', fontSize: 11 },
-        labelLine: { show: true, length: 15, length2: 10 }
+        radius: config.type === 'doughnut' ? ['50%', '75%'] : '75%', 
+        center: ['35%', '50%'], 
+        data: data.map((d, i) => ({ name: d.name, value: d.value_0, itemStyle: { color: COLORS[i % COLORS.length] } })),
+        label: { show: false },
+        labelLine: { show: false }
       }]
     };
   } else {
     option = {
       tooltip: { trigger: 'axis', formatter: (params: any[]) => `${params[0].name}<br/>` + params.map((p: any) => `${p.marker} ${fmt(p.value, config.isPercentage)}`).join('<br/>') },
-      grid: { left: '3%', right: '4%', bottom: '10%', top: '15%', containLabel: true },
-      xAxis: { type: 'category', data: data.map(d => d.name), axisLabel: { fontSize: 9 } },
-      yAxis: { type: 'value', axisLabel: { fontSize: 9, formatter: (v: number) => fmt(v, config.isPercentage) } },
-      series: [{ type: config.type, itemStyle: { color: COLORS[0] }, data: data.map(d => d.value_0) }]
+      grid: { left: '3%', right: '4%', bottom: '5%', top: '15%', containLabel: true },
+      xAxis: { type: 'category', data: data.map(d => d.name), axisLabel: { fontSize: 10, color: '#888' }, axisLine: { show: false }, axisTick: { show: false } },
+      yAxis: { type: 'value', axisLabel: { show: false }, splitLine: { show: false } },
+      series: [{ type: config.type, itemStyle: { color: '#E3001B', borderRadius: [4, 4, 0, 0] }, barWidth: '60%', data: data.map((d, i) => ({ value: d.value_0, itemStyle: { color: i === 2 ? '#111111' : '#E3001B' } })) }]
     };
   }
 
   return (
-    <div style={{ background: 'transparent', borderRadius: 12, display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', animation: 'fadeIn 0.6s ease-out' }}>
+    <div style={{ background: '#F7F5F0', borderRadius: 16, display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', animation: 'fadeIn 0.6s ease-out' }}>
       <div className="drag-handle" style={{ position: 'absolute', inset: 0, cursor: 'grab', zIndex: 1 }}></div>
-      <div style={{ textAlign: 'center', padding: '0.75rem', zIndex: 2 }}>
-        <div style={{ fontSize: '1rem', fontWeight: 500, color: '#333' }}>{config.title}</div>
+      <div style={{ textAlign: 'left', padding: '1rem 1.25rem 0 1.25rem', zIndex: 2 }}>
+        <div style={{ fontSize: '0.95rem', fontWeight: 500, color: '#777' }}>{config.title}</div>
       </div>
-      <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}>
+      <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 10 }}>
         <button onClick={onEdit} style={{ padding: 4, borderRadius: 4, color: '#a1a1aa', background: 'transparent', border: 'none', cursor: 'pointer' }}><Edit2 size={12} /></button>
       </div>
-      <div style={{ flex: 1, minHeight: 0, zIndex: 2, pointerEvents: 'none' }}>
+      <div style={{ flex: 1, minHeight: 0, zIndex: 2, pointerEvents: 'none', padding: '0.5rem' }}>
         <ReactECharts option={option} style={{ height: '100%', width: '100%', pointerEvents: 'auto' }} />
       </div>
     </div>
