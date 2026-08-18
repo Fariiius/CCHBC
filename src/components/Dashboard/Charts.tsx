@@ -251,6 +251,7 @@ export const DashboardView = () => {
 
       {/* Grid */}
       <div ref={layoutRef} style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', position: 'relative', zIndex: 1 }}>
+        {/* @ts-ignore */}
         <ResponsiveGridLayout className="layout" layouts={layouts} breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }} cols={{ lg: 24, md: 20, sm: 12, xs: 8, xxs: 4 }} rowHeight={60} onLayoutChange={(l) => updateLayouts(l.map(x=>({i:x.i, x:x.x, y:x.y, w:x.w, h:x.h})))} draggableHandle=".drag-handle" margin={[24, 24]} compactType={null} preventCollision={false}>
           {kpiConfigs.map(k => (
             <div key={k.id}><KPICard config={k} activeFilters={activeFilters} onEdit={() => setShowKpiModal(k)} /></div>
