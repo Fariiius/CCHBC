@@ -124,7 +124,7 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
       await db.pinnedCells.add({ id: cellId, uploadId, name, value, sheetName, cellRef });
       
       // Auto-create a KPI config for it
-      await addKpi({ pinnedCellId: cellId, title: name, w: 3, h: 2 });
+      await addKpi({ pinnedCellId: cellId, title: name, w: 12, h: 3 });
     } catch (err) {
       console.error(err);
     }

@@ -7,7 +7,7 @@ import { ResponsiveGridLayout } from 'react-grid-layout';
 import ReactECharts from 'echarts-for-react';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
-import { Edit2, X, Plus, GripHorizontal, Download, Filter } from 'lucide-react';
+import { Edit2, X, Plus, GripHorizontal, Download, Filter, Trash2, TrendingUp, TrendingDown, Activity, BarChart3, DollarSign, Percent, Hash } from 'lucide-react';
 import _ from 'lodash';
 
 const COLORS = ['#E3001B', '#EAA700', '#111111', '#cccccc'];
@@ -87,7 +87,7 @@ const KpiModal = ({ onClose, initial }: { onClose: () => void, initial?: KpiConf
         <button onClick={onClose} style={{ flex: 1, padding: '0.75rem', borderRadius: 8, background: '#f1f3f4', fontWeight: 700, border: 'none', cursor: 'pointer', color: '#5f6368' }}>Cancel</button>
         <button disabled={mode === 'pinned' ? !pinnedId : !col} onClick={() => {
           if (initial) updateKpi(initial.id, { pinnedCellId: pinnedId || undefined, tableId: tid || undefined, col, calcCol: calc || undefined, calcOp: calc ? op : undefined, isPercentage: isPerc, title });
-          else addKpi({ pinnedCellId: pinnedId || undefined, tableId: tid || undefined, col, calcCol: calc || undefined, calcOp: calc ? op : undefined, isPercentage: isPerc, w: 3, h: 2, title });
+          else addKpi({ pinnedCellId: pinnedId || undefined, tableId: tid || undefined, col, calcCol: calc || undefined, calcOp: calc ? op : undefined, isPercentage: isPerc, w: 12, h: 3, title });
           onClose();
         }} style={{ flex: 1, padding: '0.75rem', borderRadius: 8, background: '#F40009', color: 'white', fontWeight: 700, border: 'none', cursor: 'pointer', opacity: (mode === 'pinned' ? !pinnedId : !col) ? 0.5 : 1 }}>Save KPI</button>
       </div>
@@ -186,7 +186,7 @@ export const DashboardView = () => {
   const layoutRef = useRef<HTMLDivElement>(null);
 
   // 12 columns everywhere ensures predictable horizontal resizing and no breakpoint coordinate mismatch
-  const layoutKpis = kpiConfigs.map(k => ({ i: k.id, x: k.x ?? 0, y: k.y ?? 0, w: k.w ?? 3, h: k.h ?? 2, minW: 2, minH: 2 }));
+  const layoutKpis = kpiConfigs.map(k => ({ i: k.id, x: k.x ?? 0, y: k.y ?? 0, w: k.w ?? 12, h: k.h ?? 3, minW: 4, minH: 2 }));
   const layoutCharts = chartConfigs.map(c => ({ i: c.id, x: c.x ?? 0, y: c.y ?? 2, w: c.w ?? 6, h: c.h ?? 5, minW: 3, minH: 4 }));
   const layouts = { lg: [...layoutKpis, ...layoutCharts] };
 
@@ -254,8 +254,8 @@ export const DashboardView = () => {
       <div ref={layoutRef} style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', position: 'relative', zIndex: 1 }}>
         {/* @ts-ignore */}
         <ResponsiveGridLayout className="layout" layouts={layouts} breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }} cols={{ lg: 12, md: 12, sm: 12, xs: 12, xxs: 12 }} rowHeight={60} onLayoutChange={(l) => updateLayouts(l.map(x=>({i:x.i, x:x.x, y:x.y, w:x.w, h:x.h})))} draggableHandle=".drag-handle" margin={[24, 24]} compactType="vertical" preventCollision={false}>
-          {kpiConfigs.map(k => (
-            <div key={k.id}><KPICard config={k} activeFilters={activeFilters} onEdit={() => setShowKpiModal(k)} /></div>
+          {kpiConfigs.map((k, idx) => (
+            <div key={k.id}><KPICard config={k} activeFilters={activeFilters} onEdit={() => setShowKpiModal(k)} index={idx} /></div>
           ))}
           {chartConfigs.map(c => (
             <div key={c.id}><ChartCard config={c} activeFilters={activeFilters} onEdit={() => setShowChartModal(c)} /></div>
@@ -269,9 +269,18 @@ export const DashboardView = () => {
   );
 };
 
+// --- KPI Card Accent Colors ---
+const KPI_ACCENTS = [
+  { gradient: 'linear-gradient(135deg, #E3001B 0%, #FF4D4D 100%)', icon: TrendingUp, bg: 'rgba(227, 0, 27, 0.08)', text: '#FF4D4D' },
+  { gradient: 'linear-gradient(135deg, #EAA700 0%, #FFD54F 100%)', icon: DollarSign, bg: 'rgba(234, 167, 0, 0.08)', text: '#FFD54F' },
+  { gradient: 'linear-gradient(135deg, #00B4D8 0%, #48CAE4 100%)', icon: Activity, bg: 'rgba(0, 180, 216, 0.08)', text: '#48CAE4' },
+  { gradient: 'linear-gradient(135deg, #06D6A0 0%, #64DFDF 100%)', icon: BarChart3, bg: 'rgba(6, 214, 160, 0.08)', text: '#64DFDF' },
+  { gradient: 'linear-gradient(135deg, #7B2FF7 0%, #C77DFF 100%)', icon: Hash, bg: 'rgba(123, 47, 247, 0.08)', text: '#C77DFF' },
+];
+
 // --- Cards (Aggregation Logic applied locally on records) ---
-const KPICard = ({ config, activeFilters, onEdit }: any) => {
-  const { records, pinnedCells } = useDashboard();
+const KPICard = ({ config, activeFilters, onEdit, index }: any) => {
+  const { records, pinnedCells, removeKpi } = useDashboard();
   let val: number | string | null = null;
 
   if (config.pinnedCellId) {
@@ -305,19 +314,149 @@ const KPICard = ({ config, activeFilters, onEdit }: any) => {
   const isPinned = !!config.pinnedCellId;
   const parsedVal = typeof val === 'string' ? Number(val.replace(/,/g, '')) : val;
   const finalVal = !isNaN(parsedVal as any) && parsedVal !== null ? Number(parsedVal) : val;
+  const accent = KPI_ACCENTS[(index || 0) % KPI_ACCENTS.length];
+  const IconComp = config.isPercentage ? Percent : accent.icon;
 
   return (
-    <div style={{ background: '#222222', border: isPinned ? '1px solid #E3001B' : '1px solid #333', borderRadius: 16, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '1.25rem', height: '100%', position: 'relative', animation: 'fadeIn 0.6s ease-out' }}>
-      <div className="drag-handle" style={{ position: 'absolute', inset: 0, cursor: 'grab', zIndex: 1 }}></div>
-      <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}>
-        <button onClick={onEdit} style={{ padding: 4, borderRadius: 4, color: '#666', background: 'transparent', border: 'none', cursor: 'pointer' }}><Edit2 size={12} /></button>
+    <div style={{
+      background: '#1A1A1A',
+      border: '1px solid #2A2A2A',
+      borderRadius: 20,
+      display: 'flex',
+      flexDirection: 'row',
+      alignItems: 'center',
+      height: '100%',
+      position: 'relative',
+      animation: 'fadeIn 0.6s ease-out',
+      overflow: 'hidden',
+      transition: 'border-color 0.3s ease, box-shadow 0.3s ease',
+    }}
+    onMouseEnter={e => { e.currentTarget.style.borderColor = '#444'; e.currentTarget.style.boxShadow = '0 8px 32px rgba(0,0,0,0.3)'; }}
+    onMouseLeave={e => { e.currentTarget.style.borderColor = '#2A2A2A'; e.currentTarget.style.boxShadow = 'none'; }}
+    >
+      {/* Left accent bar */}
+      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 5, background: accent.gradient, borderRadius: '20px 0 0 20px' }} />
+
+      {/* Drag handle - full card */}
+      <div className="drag-handle" style={{ position: 'absolute', inset: 0, cursor: 'grab', zIndex: 1 }} />
+
+      {/* Icon section */}
+      <div style={{
+        width: 80,
+        minWidth: 80,
+        height: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginLeft: 16,
+        zIndex: 2,
+      }}>
+        <div style={{
+          width: 56,
+          height: 56,
+          borderRadius: 16,
+          background: accent.bg,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+          <IconComp size={26} color={accent.text} strokeWidth={2} />
+        </div>
       </div>
-      <div style={{ fontSize: '0.85rem', fontWeight: 500, color: isPinned ? '#E3001B' : '#A0A0A0', marginBottom: '0.5rem', zIndex: 2 }}>
-        {config.title || config.col || 'KPI'}
+
+      {/* Content section */}
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        padding: '1.5rem 1rem 1.5rem 0.5rem',
+        zIndex: 2,
+        minWidth: 0,
+      }}>
+        <div style={{
+          fontSize: '0.8rem',
+          fontWeight: 600,
+          color: '#888',
+          textTransform: 'uppercase',
+          letterSpacing: '1.5px',
+          marginBottom: 8,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}>
+          {config.title || config.col || 'KPI'}
+        </div>
+        <div style={{
+          fontSize: 'clamp(2rem, 4vw, 3.5rem)',
+          fontWeight: 700,
+          color: '#FFFFFF',
+          lineHeight: 1,
+          letterSpacing: '-2px',
+          fontVariantNumeric: 'tabular-nums',
+        }}>
+          {typeof finalVal === 'number' ? fmt(finalVal, config.isPercentage) : (finalVal || '-')}
+        </div>
+        {config.calcCol && (
+          <div style={{ fontSize: '0.75rem', color: '#666', marginTop: 6, fontWeight: 500 }}>
+            {config.col} {config.calcOp} {config.calcCol}
+          </div>
+        )}
       </div>
-      <div style={{ fontSize: '2.5rem', fontWeight: 500, color: isPinned ? '#E3001B' : '#FFFFFF', lineHeight: 1, zIndex: 2, letterSpacing: '-1px' }}>
-        {typeof finalVal === 'number' ? fmt(finalVal, config.isPercentage) : (finalVal || '-')}
+
+      {/* Right side - decorative mini chart + actions */}
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-end',
+        justifyContent: 'space-between',
+        padding: '1rem 1.25rem',
+        height: '100%',
+        zIndex: 10,
+      }}>
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button onClick={onEdit} title="Edit" style={{ padding: 6, borderRadius: 8, color: '#555', background: 'rgba(255,255,255,0.04)', border: '1px solid transparent', cursor: 'pointer', transition: 'all 0.2s' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#aaa'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = '#555'; }}
+          ><Edit2 size={14} /></button>
+          <button onClick={() => removeKpi(config.id)} title="Delete" style={{ padding: 6, borderRadius: 8, color: '#555', background: 'rgba(255,255,255,0.04)', border: '1px solid transparent', cursor: 'pointer', transition: 'all 0.2s' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(227,0,27,0.1)'; e.currentTarget.style.color = '#E3001B'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = '#555'; }}
+          ><Trash2 size={14} /></button>
+        </div>
+
+        {/* Decorative SVG sparkline */}
+        <svg width="120" height="40" viewBox="0 0 120 40" fill="none" style={{ opacity: 0.15 }}>
+          <path d="M0 35 Q15 30 25 28 T50 20 T75 15 T100 8 T120 5" stroke={accent.text} strokeWidth="2" fill="none" />
+          <path d="M0 35 Q15 30 25 28 T50 20 T75 15 T100 8 T120 5 L120 40 L0 40 Z" fill={`url(#grad-${index})`} />
+          <defs>
+            <linearGradient id={`grad-${index}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={accent.text} stopOpacity="0.3" />
+              <stop offset="100%" stopColor={accent.text} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+        </svg>
       </div>
+
+      {/* Pinned badge */}
+      {isPinned && (
+        <div style={{
+          position: 'absolute',
+          top: 12,
+          left: 20,
+          background: 'rgba(227, 0, 27, 0.15)',
+          color: '#FF4D4D',
+          fontSize: '0.6rem',
+          fontWeight: 700,
+          padding: '3px 8px',
+          borderRadius: 6,
+          textTransform: 'uppercase',
+          letterSpacing: '1px',
+          zIndex: 10,
+        }}>
+          📌 Pinned
+        </div>
+      )}
     </div>
   );
 };
