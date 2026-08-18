@@ -2,13 +2,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useDashboard, ChartConfig, KpiConfig, ChartSeries } from '@/context/DashboardContext';
-import { Responsive, WidthProvider } from 'react-grid-layout';
+import { ResponsiveGridLayout } from 'react-grid-layout';
 import ReactECharts from 'echarts-for-react';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import { Edit2, X, Plus, GripHorizontal, Download } from 'lucide-react';
 
-const ResponsiveGridLayout = WidthProvider(Responsive);
 const COLORS = ['#F40009', '#111111', '#555555', '#999999', '#D90008'];
 
 // --- Helpers ---

@@ -13,6 +13,7 @@ export interface SheetAnalysis {
 
 export interface ChartSeries {
   id: string;
+  sheetName: string;
   valueCol: string;
   calcOp?: '+'|'-'|'*'|'/';
   calcCol?: string;
@@ -21,7 +22,6 @@ export interface ChartSeries {
 
 export interface ChartConfig {
   id: string;
-  sheetName: string;
   categoryCol: string;
   title: string;
   type: 'pie'|'bar'|'line'|'doughnut';
