@@ -15,8 +15,8 @@ const COLORS = ['#E3001B', '#EAA700', '#111111', '#cccccc'];
 // --- Helpers ---
 const fmt = (val: number, isPerc?: boolean) => {
   if (isNaN(val) || val == null) return '-';
-  if (isPerc) return (val * 100).toFixed(0) + '%';
-  return val >= 1000000000 ? (val/1000000000).toFixed(2) + 'bn' : val >= 1000000 ? (val/1000000).toFixed(2) + 'M' : val >= 1000 ? (val/1000).toFixed(2) + 'k' : val.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  if (isPerc) return val.toFixed(0) + '%';
+  return val >= 1000000000 ? (val/1000000000).toFixed(2) + 'bn' : val >= 1000000 ? (val/1000000).toFixed(2) + 'M' : val >= 1000 ? (val/1000).toFixed(2) + 'k' : val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
 // --- Modals ---
@@ -246,7 +246,7 @@ export const DashboardView = () => {
       {/* Grid */}
       <div ref={layoutRef} style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', position: 'relative', zIndex: 1 }}>
         {/* @ts-ignore */}
-        <ResponsiveGridLayout className="layout" layouts={layouts} breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }} cols={{ lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }} rowHeight={60} onLayoutChange={(l) => updateLayouts(l.map(x=>({i:x.i, x:x.x, y:x.y, w:x.w, h:x.h})))} draggableHandle=".drag-handle" margin={[16, 16]}>
+        <ResponsiveGridLayout className="layout" layouts={layouts} breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }} cols={{ lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }} rowHeight={60} onLayoutChange={(l) => updateLayouts(l.map(x=>({i:x.i, x:x.x, y:x.y, w:x.w, h:x.h})))} draggableHandle=".drag-handle" margin={[16, 16]} compactType={null} preventCollision={false}>
           {kpiConfigs.map(k => (
             <div key={k.id}><KPICard config={k} activeFilters={activeFilters} onEdit={() => setShowKpiModal(k)} /></div>
           ))}
@@ -342,7 +342,7 @@ const ChartCard = ({ config, activeFilters, onEdit }: any) => {
   
   if (config.type === 'pie' || config.type === 'doughnut') {
     option = {
-      tooltip: { trigger: 'item', formatter: (p: any) => `<b>${p.name}</b><br/>${p.marker} ${fmt(p.value, config.isPercentage)}${config.isPercentage ? '' : ` (${p.percent}%)`}` },
+      tooltip: { trigger: 'item', formatter: (p: any) => `<b>${p.name}</b><br/>${p.marker} ${fmt(p.value, config.isPercentage)}` },
       legend: { type: 'scroll', orient: 'vertical', right: 10, top: 'middle', textStyle: { fontSize: 11, color: '#555' }, icon: 'circle' },
       series: [{ 
         type: 'pie', 
